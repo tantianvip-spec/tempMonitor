@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>温湿度监控 - Mockups</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Manrope', sans-serif;
+      background: #0B0C0F;
+      color: #F0F2F5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+    }
+    h1 {
+      font-size: 28px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    p {
+      color: #8B919D;
+      margin-bottom: 32px;
+      text-align: center;
+    }
+    .mockup-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+      max-width: 1200px;
+      width: 100%;
+    }
+    .mockup-card {
+      background: #14161B;
+      border: 1px solid #2A2E37;
+      border-radius: 16px;
+      padding: 20px;
+      text-decoration: none;
+      color: inherit;
+      transition: transform 0.15s ease;
+    }
+    .mockup-card:hover {
+      transform: scale(0.98);
+    }
+    .mockup-card h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .mockup-card span {
+      color: #8B919D;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <h1>温湿度监控 App Mockups</h1>
+  <p>Scientific Instrument Minimalism · 深色模式</p>
+  <div class="mockup-grid">
+    <a href="dashboard.html" class="mockup-card">
+      <h2>仪表盘</h2>
+      <span>当前温湿度、电量、信号、下拉刷新</span>
+    </a>
+    <a href="history.html" class="mockup-card">
+      <h2>历史曲线</h2>
+      <span>24h / 7d / 30d 折线图与统计</span>
+    </a>
+    <a href="settings.html" class="mockup-card">
+      <h2>设置</h2>
+      <span>扫描频率、阈值、数据保留、模拟设备</span>
+    </a>
+    <a href="devices.html" class="mockup-card">
+      <h2>设备列表</h2>
+      <span>已发现设备与最后读数</span>
+    </a>
+    <a href="debug-log.html" class="mockup-card">
+      <h2>调试日志</h2>
+      <span>实时日志、复制、清空</span>
+    </a>
+  </div>
+</body>
+</html>

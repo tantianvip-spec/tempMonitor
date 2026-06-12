@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>设置 - Mockup</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0B0C0F;
+      --bg-secondary: #14161B;
+      --bg-tertiary: #1E2128;
+      --text-primary: #F0F2F5;
+      --text-secondary: #8B919D;
+      --text-muted: #5A6270;
+      --accent-temp: #FF9F43;
+      --accent-humidity: #4DABF7;
+      --border: #2A2E37;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Manrope', sans-serif;
+      background: #1a1c22;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    .phone {
+      width: 375px;
+      height: 812px;
+      background: var(--bg-primary);
+      border-radius: 40px;
+      border: 8px solid #2A2E37;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+    .status-bar {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .app-bar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 24px 16px;
+    }
+    .app-bar h1 {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .app-bar .icon {
+      width: 24px;
+      height: 24px;
+      color: var(--text-secondary);
+    }
+    .content {
+      flex: 1;
+      padding: 0 24px;
+      overflow-y: auto;
+    }
+    .section {
+      margin-bottom: 24px;
+    }
+    .section-title {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      padding-left: 4px;
+    }
+    .card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .list-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .list-item:last-child {
+      border-bottom: none;
+    }
+    .list-item .left {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .list-item .title {
+      font-size: 15px;
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+    .list-item .subtitle {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .list-item .value {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 15px;
+      color: var(--text-secondary);
+    }
+    .switch {
+      width: 52px;
+      height: 28px;
+      background: var(--accent-humidity);
+      border-radius: 999px;
+      position: relative;
+      cursor: pointer;
+    }
+    .switch.off {
+      background: var(--bg-tertiary);
+    }
+    .switch::after {
+      content: '';
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      background: var(--text-primary);
+      border-radius: 50%;
+      top: 2px;
+      right: 2px;
+      transition: transform 0.2s;
+    }
+    .switch.off::after {
+      transform: translateX(-24px);
+      background: var(--text-muted);
+    }
+    .slider-row {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .slider-row:last-child {
+      border-bottom: none;
+    }
+    .slider-label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .slider-label .title {
+      font-size: 15px;
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+    .slider-label .range {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .slider-track {
+      height: 4px;
+      background: var(--bg-tertiary);
+      border-radius: 2px;
+      position: relative;
+    }
+    .slider-fill {
+      position: absolute;
+      left: 25%;
+      right: 25%;
+      top: 0;
+      bottom: 0;
+      background: var(--accent-temp);
+      border-radius: 2px;
+    }
+    .slider-thumb {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background: var(--text-primary);
+      border: 2px solid var(--accent-temp);
+      border-radius: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+    }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <div class="status-bar">9:41</div>
+    <div class="app-bar">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M19 12H5M12 19l-7-7 7-7"/>
+      </svg>
+      <h1>设置</h1>
+    </div>
+    <div class="content">
+      <div class="section">
+        <div class="section-title">扫描</div>
+        <div class="card">
+          <div class="list-item">
+            <div class="left">
+              <div class="title">扫描频率</div>
+              <div class="subtitle">设备广播越频繁，耗电越高</div>
+            </div>
+            <div class="value">5 秒 ▸</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">数据</div>
+        <div class="card">
+          <div class="list-item">
+            <div class="left">
+              <div class="title">数据保留天数</div>
+              <div class="subtitle">超过期限的历史记录自动删除</div>
+            </div>
+            <div class="value">30 天 ▸</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">告警阈值</div>
+        <div class="card">
+          <div class="slider-row">
+            <div class="slider-label">
+              <span class="title">温度范围</span>
+              <span class="range">0.0 ~ 40.0°C</span>
+            </div>
+            <div class="slider-track">
+              <div class="slider-fill"></div>
+              <div class="slider-thumb" style="left: 25%;"></div>
+              <div class="slider-thumb" style="left: 75%;"></div>
+            </div>
+          </div>
+          <div class="slider-row">
+            <div class="slider-label">
+              <span class="title">湿度范围</span>
+              <span class="range">20.0 ~ 80.0%</span>
+            </div>
+            <div class="slider-track">
+              <div class="slider-fill" style="left: 20%; right: 20%;"></div>
+              <div class="slider-thumb" style="left: 20%;"></div>
+              <div class="slider-thumb" style="left: 80%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">调试</div>
+        <div class="card">
+          <div class="list-item">
+            <div class="left">
+              <div class="title">模拟设备模式</div>
+              <div class="subtitle">不扫描真实蓝牙，生成测试数据</div>
+            </div>
+            <div class="switch off"></div>
+          </div>
+          <div class="list-item">
+            <div class="left">
+              <div class="title">调试日志</div>
+            </div>
+            <div class="value">▸</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

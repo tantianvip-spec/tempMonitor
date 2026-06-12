@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>调试日志 - Mockup</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0B0C0F;
+      --bg-secondary: #14161B;
+      --bg-tertiary: #1E2128;
+      --text-primary: #F0F2F5;
+      --text-secondary: #8B919D;
+      --text-muted: #5A6270;
+      --accent-info: #4DABF7;
+      --accent-warning: #FFD43B;
+      --accent-error: #FF6B6B;
+      --accent-debug: #5A6270;
+      --border: #2A2E37;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Manrope', sans-serif;
+      background: #1a1c22;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    .phone {
+      width: 375px;
+      height: 812px;
+      background: var(--bg-primary);
+      border-radius: 40px;
+      border: 8px solid #2A2E37;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+    .status-bar {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .app-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px 16px;
+    }
+    .app-bar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .app-bar h1 {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .app-bar .icon {
+      width: 24px;
+      height: 24px;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 16px;
+    }
+    .log-list {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .log-item {
+      display: flex;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .log-item:last-child {
+      border-bottom: none;
+    }
+    .log-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-top: 5px;
+      flex-shrink: 0;
+    }
+    .log-dot.info { background: var(--accent-info); }
+    .log-dot.debug { background: var(--accent-debug); }
+    .log-dot.warning { background: var(--accent-warning); }
+    .log-dot.error { background: var(--accent-error); }
+    .log-content {
+      flex: 1;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .log-meta {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 2px;
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+    .log-tag {
+      color: var(--accent-info);
+    }
+    .log-message {
+      color: var(--text-secondary);
+    }
+    .fab {
+      position: absolute;
+      right: 24px;
+      bottom: 32px;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: var(--accent-info);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--bg-primary);
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(77, 171, 247, 0.25);
+    }
+    .fab svg {
+      width: 24px;
+      height: 24px;
+    }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <div class="status-bar">9:41</div>
+    <div class="app-bar">
+      <div class="app-bar-left">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        <h1>调试日志</h1>
+      </div>
+      <div class="actions">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        </svg>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+        </svg>
+      </div>
+    </div>
+    <div class="content">
+      <div class="log-list">
+        <div class="log-item">
+          <div class="log-dot info"></div>
+          <div class="log-content">
+            <div class="log-meta">
+              <span>14:32:01</span>
+              <span class="log-tag">[BLE]</span>
+            </div>
+            <div class="log-message">扫描到设备 A4:C1:38:00:00:01</div>
+          </div>
+        </div>
+        <div class="log-item">
+          <div class="log-dot info"></div>
+          <div class="log-content">
+            <div class="log-meta">
+              <span>14:32:01</span>
+              <span class="log-tag">[Parser]</span>
+            </div>
+            <div class="log-message">解析结果：25.3°C, 62.0%</div>
+          </div>
+        </div>
+        <div class="log-item">
+          <div class="log-dot debug"></div>
+          <div class="log-content">
+            <div class="log-meta">
+              <span>14:31:56</span>
+              <span class="log-tag">[Repo]</span>
+            </div>
+            <div class="log-message">保存读数到数据库</div>
+          </div>
+        </div>
+        <div class="log-item">
+          <div class="log-dot debug"></div>
+          <div class="log-content">
+            <div class="log-meta">
+              <span>14:31:51</span>
+              <span class="log-tag">[BG]</span>
+            </div>
+            <div class="log-message">后台扫描运行中，间隔 5 秒</div>
+          </div>
+        </div>
+        <div class="log-item">
+          <div class="log-dot info"></div>
+          <div class="log-content">
+            <div class="log-meta">
+              <span>14:31:46</span>
+              <span class="log-tag">[BLE]</span>
+            </div>
+            <div class="log-message">扫描到设备 A4:C1:38:00:00:01</div>
+          </div>
+        </div>
+        <div class="log-item">
+          <div class="log-dot warning"></div>
+          <div class="log-content">
+            <div class="log-meta">
+              <span>14:31:41</span>
+              <span class="log-tag">[Parser]</span>
+            </div>
+            <div class="log-message">丢弃异常包：温度超出范围 344.64°C</div>
+          </div>
+        </div>
+        <div class="log-item">
+          <div class="log-dot debug"></div>
+          <div class="log-content">
+            <div class="log-meta">
+              <span>14:31:36</span>
+              <span class="log-tag">[BG]</span>
+            </div>
+            <div class="log-message">前台服务已启动</div>
+          </div>
+        </div>
+        <div class="log-item">
+          <div class="log-dot info"></div>
+          <div class="log-content">
+            <div class="log-meta">
+              <span>14:31:31</span>
+              <span class="log-tag">[App]</span>
+            </div>
+            <div class="log-message">应用启动完成</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button class="fab">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+      </svg>
+    </button>
+  </div>
+</body>
+</html>

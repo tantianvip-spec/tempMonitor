@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>历史曲线 - Mockup</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0B0C0F;
+      --bg-secondary: #14161B;
+      --bg-tertiary: #1E2128;
+      --text-primary: #F0F2F5;
+      --text-secondary: #8B919D;
+      --text-muted: #5A6270;
+      --accent-temp: #FF9F43;
+      --accent-humidity: #4DABF7;
+      --border: #2A2E37;
+      --grid-line: #1E2128;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Manrope', sans-serif;
+      background: #1a1c22;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    .phone {
+      width: 375px;
+      height: 812px;
+      background: var(--bg-primary);
+      border-radius: 40px;
+      border: 8px solid #2A2E37;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+    .status-bar {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .app-bar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 24px 16px;
+    }
+    .app-bar h1 {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .app-bar .icon {
+      width: 24px;
+      height: 24px;
+      color: var(--text-secondary);
+    }
+    .content {
+      flex: 1;
+      padding: 0 24px;
+      overflow-y: auto;
+    }
+    .chart-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+      height: 320px;
+      position: relative;
+    }
+    .chart-title {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+    }
+    .chart-area {
+      position: relative;
+      height: 220px;
+      width: 100%;
+    }
+    .chart-svg {
+      width: 100%;
+      height: 100%;
+    }
+    .legend {
+      display: flex;
+      gap: 16px;
+      margin-top: 12px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .segmented-control {
+      display: flex;
+      background: var(--bg-tertiary);
+      border-radius: 999px;
+      padding: 4px;
+      margin-bottom: 24px;
+    }
+    .segment {
+      flex: 1;
+      text-align: center;
+      padding: 8px 0;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    .segment.active {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+    .section-title {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+    }
+    .stat-card .label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+    .stat-card .value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 22px;
+      font-weight: 400;
+      color: var(--text-primary);
+    }
+    .stat-card .value.temp { color: var(--accent-temp); }
+    .stat-card .value.humidity { color: var(--accent-humidity); }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <div class="status-bar">9:41</div>
+    <div class="app-bar">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M19 12H5M12 19l-7-7 7-7"/>
+      </svg>
+      <h1>历史曲线</h1>
+    </div>
+    <div class="content">
+      <div class="chart-card">
+        <div class="chart-title">客厅 · 过去 24 小时</div>
+        <div class="chart-area">
+          <svg class="chart-svg" viewBox="0 0 300 220" preserveAspectRatio="none">
+            <!-- Grid lines -->
+            <line x1="0" y1="55" x2="300" y2="55" stroke="var(--grid-line)" stroke-width="1" stroke-dasharray="4 4"/>
+            <line x1="0" y1="110" x2="300" y2="110" stroke="var(--grid-line)" stroke-width="1" stroke-dasharray="4 4"/>
+            <line x1="0" y1="165" x2="300" y2="165" stroke="var(--grid-line)" stroke-width="1" stroke-dasharray="4 4"/>
+
+            <!-- Humidity line (blue) -->
+            <polyline
+              fill="none"
+              stroke="var(--accent-humidity)"
+              stroke-width="2"
+              points="0,120 30,125 60,118 90,130 120,122 150,128 180,115 210,120 240,110 270,105 300,100"
+            />
+
+            <!-- Temperature line (orange) -->
+            <polyline
+              fill="none"
+              stroke="var(--accent-temp)"
+              stroke-width="2"
+              points="0,160 30,155 60,158 90,150 120,145 150,148 180,140 210,135 240,138 270,130 300,125"
+            />
+          </svg>
+        </div>
+        <div class="legend">
+          <div class="legend-item">
+            <div class="legend-dot" style="background: var(--accent-temp);"></div>
+            <span>温度</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background: var(--accent-humidity);"></div>
+            <span>湿度</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="segmented-control">
+        <div class="segment active">24h</div>
+        <div class="segment">7d</div>
+        <div class="segment">30d</div>
+      </div>
+
+      <div class="section-title">统计</div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="label">最高温度</div>
+          <div class="value temp">28.5°C</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">最低温度</div>
+          <div class="value temp">22.1°C</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">平均温度</div>
+          <div class="value temp">25.3°C</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">平均湿度</div>
+          <div class="value humidity">61.2%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
