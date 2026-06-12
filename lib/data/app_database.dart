@@ -15,6 +15,11 @@ part 'app_database.g.dart';
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
+  /// Test-only constructor. Pass `NativeDatabase.memory()` (or any
+  /// other [QueryExecutor]) to run against an in-memory SQLite instance
+  /// without needing the Flutter platform binding or path_provider.
+  AppDatabase.forTesting(super.executor);
+
   @override
   int get schemaVersion => 1;
 
