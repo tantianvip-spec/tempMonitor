@@ -5,10 +5,13 @@ import 'dart:ui';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:temp_monitor/core/constants.dart';
-import 'package:temp_monitor/data/app_database.dart';
+// drift generates a `Reading` row class that collides with our domain model.
+import 'package:temp_monitor/data/app_database.dart' hide Reading;
+import 'package:temp_monitor/domain/models/reading.dart';
 import 'package:temp_monitor/domain/services/threshold_engine.dart';
 import 'package:temp_monitor/infrastructure/ble_scanner.dart';
 import 'package:temp_monitor/infrastructure/debug_logger.dart';
+import 'package:temp_monitor/infrastructure/mock_sensor.dart';
 import 'package:temp_monitor/infrastructure/notification_service.dart';
 import 'package:temp_monitor/repositories/sensor_repository.dart';
 import 'package:temp_monitor/services/settings_service.dart';
@@ -49,6 +52,7 @@ class BackgroundService {
     final db = AppDatabase();
     final repository = SensorRepository(db);
     final scanner = BleScanner();
+    final mockSensor = MockSensor();
     final notifications = NotificationService();
     await notifications.initialize();
 
@@ -67,32 +71,63 @@ class BackgroundService {
     SendPort? uiPort =
         IsolateNameServer.lookupPortByName(AppConstants.uiIsolatePortName);
 
+    // Processes a single Reading: persist, push to UI, fire notification
+    // on a newly-breached threshold. Shared by both mock and real paths
+    // so mock mode is functionally equivalent to a live device.
+    Future<void> handleReading(Reading reading) async {
+      await repository.saveReading(reading);
+      uiPort ??=
+          IsolateNameServer.lookupPortByName(AppConstants.uiIsolatePortName);
+      uiPort?.send(reading);
+
+      final state = thresholdEngine.evaluate(
+        temperature: reading.temperature,
+        humidity: reading.humidity,
+      );
+
+      if (state.justBecameBreached) {
+        await notifications.showAlert(
+          title: '温湿度告警',
+          body:
+              '温度 ${reading.temperature}°C / 湿度 ${reading.humidity}% 超出设定范围',
+        );
+      }
+    }
+
     Timer? scanTimer;
+    StreamSubscription<Reading>? mockSubscription;
+
+    void cancelAll() {
+      scanTimer?.cancel();
+      scanTimer = null;
+      mockSubscription?.cancel();
+      mockSubscription = null;
+    }
 
     void startScanning() {
+      cancelAll();
       final interval = Duration(seconds: settings.getScanIntervalSeconds());
-      scanTimer?.cancel();
+
+      if (settings.getMockDeviceEnabled()) {
+        DebugLogger().i('Starting mock sensor stream', tag: 'BackgroundService');
+        mockSubscription = mockSensor
+            .readings(deviceId: 'mock-device', interval: interval)
+            .listen((reading) async {
+          try {
+            await handleReading(reading);
+          } catch (e) {
+            DebugLogger()
+                .e('Mock handler error: $e', tag: 'BackgroundService');
+          }
+        });
+        return;
+      }
+
       scanTimer = Timer.periodic(interval, (_) async {
         try {
           await for (final reading
               in scanner.scan(timeout: const Duration(seconds: 2))) {
-            await repository.saveReading(reading);
-            uiPort ??= IsolateNameServer.lookupPortByName(
-                AppConstants.uiIsolatePortName);
-            uiPort?.send(reading);
-
-            final state = thresholdEngine.evaluate(
-              temperature: reading.temperature,
-              humidity: reading.humidity,
-            );
-
-            if (state.justBecameBreached) {
-              await notifications.showAlert(
-                title: '温湿度告警',
-                body:
-                    '温度 ${reading.temperature}°C / 湿度 ${reading.humidity}% 超出设定范围',
-              );
-            }
+            await handleReading(reading);
           }
         } catch (e) {
           DebugLogger()
@@ -102,7 +137,7 @@ class BackgroundService {
     }
 
     service.on('stopService').listen((event) {
-      scanTimer?.cancel();
+      cancelAll();
       service.stopSelf();
     });
 
