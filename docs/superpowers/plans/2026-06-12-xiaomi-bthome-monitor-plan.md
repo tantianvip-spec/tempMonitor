@@ -6,7 +6,9 @@
 
 **Architecture:** 采用分层架构：Domain 层负责 BThome 解析和阈值判断；Data 层用 Drift 管理本地 SQLite；Infrastructure 层负责 BLE 扫描、通知、后台服务；Presentation 层用 Cubit 管理 UI 状态。所有业务逻辑优先写单元测试，再写实现。
 
-**Tech Stack:** Flutter, flutter_blue_plus, drift, flutter_bloc, fl_chart, flutter_local_notifications, flutter_background_service, permission_handler, shared_preferences
+**Tech Stack:** Flutter, flutter_blue_plus, drift, flutter_bloc, fl_chart, flutter_local_notifications, flutter_background_service, permission_handler, shared_preferences, google_fonts, phosphor_flutter
+
+**UI 设计规范：** `docs/superpowers/design/2026-06-12-ui-design-spec.md`（Scientific Instrument Minimalism）
 
 ---
 
@@ -116,6 +118,8 @@ dependencies:
   permission_handler: ^11.3.1
   shared_preferences: ^2.2.3
   path_provider: ^2.1.3
+  google_fonts: ^6.2.1
+  phosphor_flutter: ^2.1.0
   equatable: ^2.0.5
   intl: ^0.19.0
   cupertino_icons: ^1.0.8
@@ -1590,7 +1594,143 @@ git commit -m "feat: add Android foreground background service"
 
 ---
 
-## Task 12: 仪表盘页面 + Cubit
+## Task 11.5: 应用视觉设计系统
+
+**Files:**
+- Create: `lib/core/theme.dart`
+- Modify: `lib/app.dart`
+
+### Step 11.5.1: 创建 Theme 文件
+
+Create `lib/core/theme.dart`:
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+class AppTheme {
+  static const Color bgPrimary = Color(0xFF0B0C0F);
+  static const Color bgSecondary = Color(0xFF14161B);
+  static const Color bgTertiary = Color(0xFF1E2128);
+  static const Color textPrimary = Color(0xFFF0F2F5);
+  static const Color textSecondary = Color(0xFF8B919D);
+  static const Color textMuted = Color(0xFF5A6270);
+  static const Color accentTemp = Color(0xFFFF9F43);
+  static const Color accentHumidity = Color(0xFF4DABF7);
+  static const Color accentSuccess = Color(0xFF51CF66);
+  static const Color accentWarning = Color(0xFFFFD43B);
+  static const Color accentDanger = Color(0xFFFF6B6B);
+  static const Color border = Color(0xFF2A2E37);
+  static const Color gridLine = Color(0xFF1E2128);
+
+  static ThemeData darkTheme() {
+    final base = ThemeData.dark();
+    final colorScheme = const ColorScheme.dark(
+      surface: bgPrimary,
+      surfaceContainerHighest: bgSecondary,
+      onSurface: textPrimary,
+      onSurfaceVariant: textSecondary,
+      outline: border,
+      primary: accentHumidity,
+      secondary: accentTemp,
+      error: accentDanger,
+    );
+
+    return base.copyWith(
+      colorScheme: colorScheme,
+      scaffoldBackgroundColor: bgPrimary,
+      cardColor: bgSecondary,
+      dividerColor: border,
+      textTheme: GoogleFonts.manropeTextTheme(base.textTheme).copyWith(
+        displayLarge: GoogleFonts.jetBrainsMono(
+          fontSize: 72,
+          fontWeight: FontWeight.w300,
+          letterSpacing: -2,
+          color: textPrimary,
+        ),
+        displayMedium: GoogleFonts.jetBrainsMono(
+          fontSize: 48,
+          fontWeight: FontWeight.w300,
+          letterSpacing: -1,
+          color: textPrimary,
+        ),
+        titleLarge: GoogleFonts.manrope(
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          color: textPrimary,
+        ),
+        titleMedium: GoogleFonts.manrope(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: textPrimary,
+        ),
+        bodyMedium: GoogleFonts.manrope(
+          fontSize: 14,
+          fontWeight: FontWeight.w400,
+          color: textPrimary,
+        ),
+        labelSmall: GoogleFonts.manrope(
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.5,
+          color: textSecondary,
+        ),
+      ),
+      cardTheme: CardTheme(
+        color: bgSecondary,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: border),
+        ),
+      ),
+      sliderTheme: const SliderThemeData(
+        activeTrackColor: accentTemp,
+        inactiveTrackColor: bgTertiary,
+        thumbColor: textPrimary,
+        overlayColor: Colors.transparent,
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return textPrimary;
+          return textMuted;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return accentHumidity;
+          return bgTertiary;
+        }),
+      ),
+    );
+  }
+}
+```
+
+### Step 11.5.2: 应用 Theme 到 App
+
+Modify `lib/app.dart`，在 `MaterialApp` 中添加：
+
+```dart
+import 'package:temp_monitor/core/theme.dart';
+
+MaterialApp(
+  title: '温湿度监控',
+  theme: AppTheme.darkTheme(),
+  darkTheme: AppTheme.darkTheme(),
+  themeMode: ThemeMode.dark,
+  ...
+)
+```
+
+### Step 11.5.3: 提交
+
+```bash
+git add lib/core/theme.dart lib/app.dart
+git commit -m "design: apply scientific instrument minimalism theme"
+```
+
+---
+
+## Task 12: 仪表盘页面 + Cubit（参考 UI 设计规范 §6.1、§5.1、§5.2）
 
 **Files:**
 - Create: `lib/presentation/dashboard/dashboard_cubit.dart`
@@ -1764,7 +1904,7 @@ git commit -m "feat: add dashboard page with pull-to-refresh"
 
 ---
 
-## Task 13: 历史曲线页面 + Cubit
+## Task 13: 历史曲线页面 + Cubit（参考 UI 设计规范 §6.2、§5.6）
 
 **Files:**
 - Create: `lib/presentation/history/history_cubit.dart`
@@ -1978,7 +2118,7 @@ git commit -m "feat: add history page with fl_chart"
 
 ---
 
-## Task 14: 设置页面 + Cubit
+## Task 14: 设置页面 + Cubit（参考 UI 设计规范 §6.3、§5.3、§5.4）
 
 **Files:**
 - Create: `lib/presentation/settings/settings_cubit.dart`
@@ -2271,7 +2411,7 @@ git commit -m "feat: add settings page for scan interval, thresholds and mock mo
 
 ---
 
-## Task 15: 调试日志页面
+## Task 15: 调试日志页面（参考 UI 设计规范 §6.5）
 
 **Files:**
 - Create: `lib/presentation/debug/debug_log_cubit.dart`
@@ -2393,7 +2533,7 @@ git commit -m "feat: add debug log page with copy and clear"
 
 ---
 
-## Task 16: 设备列表页面
+## Task 16: 设备列表页面（参考 UI 设计规范 §6.4、§5.5）
 
 **Files:**
 - Create: `lib/presentation/devices/devices_page.dart`
@@ -2468,7 +2608,7 @@ git commit -m "feat: add devices list page"
 
 ---
 
-## Task 17: App 入口与依赖注入
+## Task 17: App 入口与依赖注入（应用已设定的 Theme）
 
 **Files:**
 - Modify: `lib/main.dart`
@@ -2969,16 +3109,17 @@ git commit -m "test: add integration test and final verification"
 
 | 设计文档章节 | 对应任务 |
 |---|---|
-| 技术栈（Flutter + flutter_blue_plus + drift + bloc + fl_chart） | Task 1 |
+| 技术栈（Flutter + flutter_blue_plus + drift + bloc + fl_chart + google_fonts + phosphor_flutter） | Task 1 |
 | BThome v2 解析 | Task 3 |
 | 阈值告警与去抖 | Task 4 |
 | 本地数据库与滚动清理 | Task 6, 7 |
 | BLE 扫描 | Task 8 |
 | 本地通知 | Task 9 |
 | 后台服务（Android 前台服务） | Task 11 |
-| 设置（扫描频率、阈值、保留天数） | Task 10, 14 |
+| UI 视觉设计系统（主题、字体、颜色、组件） | Task 11.5 |
 | 仪表盘与下拉刷新 | Task 12 |
 | 历史曲线 | Task 13 |
+| 设置（扫描频率、阈值、保留天数） | Task 10, 14 |
 | 设备列表 | Task 16 |
 | 调试日志 | Task 5, 15 |
 | Android 权限 | Task 11, 21 |
