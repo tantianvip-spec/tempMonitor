@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:temp_monitor/core/extensions.dart';
 import 'package:temp_monitor/core/theme.dart';
 import 'package:temp_monitor/domain/models/device.dart';
 import 'package:temp_monitor/domain/models/reading.dart';
@@ -108,6 +109,8 @@ class _DeviceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final repository = context.read<SensorRepository>();
+
     return ListTile(
       onTap: onTap,
       leading: Container(
@@ -131,10 +134,28 @@ class _DeviceTile extends StatelessWidget {
           fontWeight: FontWeight.w600,
         ),
       ),
-      // TODO(task-17): show last reading in subtitle (e.g. "5秒前 · 25.3°C · 62.0%")
-      subtitle: const Text(
-        '—',
-        style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+      subtitle: FutureBuilder<Reading?>(
+        future: repository.getLatestReading(device.id),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Text(
+              '加载中…',
+              style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+            );
+          }
+          final reading = snapshot.data;
+          if (reading == null) {
+            return const Text(
+              '暂无数据',
+              style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+            );
+          }
+          final ago = reading.recordedAt.toAgoString();
+          return Text(
+            '$ago · ${reading.temperature.toTempString()} · ${reading.humidity.toHumidityString()}',
+            style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
+          );
+        },
       ),
       trailing: const Icon(
         Icons.chevron_right,
