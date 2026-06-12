@@ -496,7 +496,21 @@ ColorScheme _darkScheme() => const ColorScheme.dark(
 
 ---
 
-## 10. 实现优先级
+## 10. 设计文件与 Mockups
+
+- 本规范：`docs/superpowers/design/2026-06-12-ui-design-spec.md`
+- 对应的实现计划：`docs/superpowers/plans/2026-06-12-xiaomi-bthome-monitor-plan.md`
+- 可交互 HTML Mockups（手机尺寸预览）：
+  - 入口：`docs/superpowers/design/mockups/index.html`
+  - 仪表盘：`docs/superpowers/design/mockups/dashboard.html`
+  - 历史曲线：`docs/superpowers/design/mockups/history.html`
+  - 设置：`docs/superpowers/design/mockups/settings.html`
+  - 设备列表：`docs/superpowers/design/mockups/devices.html`
+  - 调试日志：`docs/superpowers/design/mockups/debug-log.html`
+
+实施时，UI 相关任务（Task 11.5、Task 12-17）需严格参考本规范和 Mockups。
+
+### 优先级
 
 1. **P0 - 核心视觉**：深色 ColorScheme + 字体系统 + 数据卡片样式
 2. **P0 - 仪表盘**：Hero 卡片 + 电量/信号卡片 + 下拉刷新
@@ -505,12 +519,3 @@ ColorScheme _darkScheme() => const ColorScheme.dark(
 5. **P1 - 设备列表**：卡片列表样式
 6. **P1 - 调试日志**：日志行样式 + 顶部操作栏
 7. **P2 - 浅色模式**：ColorScheme 切换
-
----
-
-## 11. 设计文件
-
-- 本规范：`docs/superpowers/design/2026-06-12-ui-design-spec.md`
-- 对应的实现计划：`docs/superpowers/plans/2026-06-12-xiaomi-bthome-monitor-plan.md`
-
-实施时，UI 相关任务（Task 12-17）需严格参考本规范。
