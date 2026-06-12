@@ -16,8 +16,13 @@ class BThomeParser {
   static const int _objectIdTemperatureHigh = 0x2A;
   static const int _objectIdHumidityHigh = 0x2B;
 
+  // Physical sanity bounds — anything outside these is treated as a
+  // garbled / wrong-firmware packet and rejected so it never reaches
+  // the DB or threshold engine.
   static const double _minTemp = -40.0;
   static const double _maxTemp = 80.0;
+  static const double _minHumidity = 0.0;
+  static const double _maxHumidity = 100.0;
 
   static Reading parse(
     List<int> bytes, {
@@ -48,39 +53,48 @@ class BThomeParser {
 
       switch (objectId) {
         case _objectIdBattery:
-          if (offset >= bytes.length) break;
+          if (offset >= bytes.length) {
+            throw BThomeParseException('Truncated battery field');
+          }
           battery = bytes[offset];
           offset++;
         case _objectIdTemperature:
         case _objectIdTemperatureHigh:
-          if (offset + 1 >= bytes.length) break;
+          if (offset + 1 >= bytes.length) {
+            throw BThomeParseException('Truncated temperature field');
+          }
           final raw = byteData.getInt16(offset, Endian.little);
           temperature = raw * 0.01;
           offset += 2;
         case _objectIdHumidity:
         case _objectIdHumidityHigh:
-          if (offset + 1 >= bytes.length) break;
+          if (offset + 1 >= bytes.length) {
+            throw BThomeParseException('Truncated humidity field');
+          }
           final raw = byteData.getUint16(offset, Endian.little);
           humidity = raw * 0.01;
           offset += 2;
         default:
-          // Unknown object id, skip if we know length, otherwise abort.
-          throw BThomeParseException('Unknown object id: 0x${objectId.toRadixString(16)}');
+          throw BThomeParseException(
+              'Unknown object id: 0x${objectId.toRadixString(16)}');
       }
     }
 
-    if (temperature == null) {
-      throw BThomeParseException('Missing temperature');
+    if (temperature == null || humidity == null) {
+      throw BThomeParseException('Missing temperature or humidity');
     }
 
     if (temperature < _minTemp || temperature > _maxTemp) {
       throw BThomeParseException('Temperature out of range: $temperature');
     }
+    if (humidity < _minHumidity || humidity > _maxHumidity) {
+      throw BThomeParseException('Humidity out of range: $humidity');
+    }
 
     return Reading(
       deviceId: deviceId,
       temperature: temperature,
-      humidity: humidity ?? 0.0,
+      humidity: humidity,
       battery: battery,
       rssi: rssi,
       recordedAt: DateTime.now().toUtc(),
