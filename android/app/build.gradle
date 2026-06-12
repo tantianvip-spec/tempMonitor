@@ -25,12 +25,16 @@ if (flutterVersionName == null) {
 
 android {
     namespace = "com.example.temp_monitor"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    compileSdk = 35
+
+    // sqlite3_flutter_libs requires NDK 25.1.8937393
+    ndkVersion = "25.1.8937393"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
+        // flutter_local_notifications requires core library desugaring
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -55,4 +59,8 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }
