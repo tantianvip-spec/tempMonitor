@@ -2,6 +2,7 @@ import 'dart:isolate';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:temp_monitor/app.dart';
 import 'package:temp_monitor/core/constants.dart';
 import 'package:temp_monitor/data/app_database.dart' hide Reading;
@@ -14,6 +15,11 @@ import 'package:temp_monitor/services/settings_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // We use Provider<Stream<Reading>> only to pass a Stream reference
+  // from main() to DashboardCubit (via listen: false), not for widget
+  // rebuilds. The debug assertion is a false positive here.
+  Provider.debugCheckInvalidValueType = null;
 
   final database = AppDatabase();
   final repository = SensorRepository(database);
