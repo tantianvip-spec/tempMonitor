@@ -49,6 +49,17 @@ void main() async {
   );
   final readingStream = receivePort.cast<Reading>().asBroadcastStream();
 
+  // Save each incoming Reading into the UI-side database so the
+  // reactive watchAllDevices() stream on the devices page fires.
+  // The background isolate writes to its own database instance, so
+  // the UI isolate must persist reads locally to see them.
+  readingStream.listen((reading) {
+    repository.saveReading(reading).catchError((e) {
+      DebugLogger().e('Failed to persist reading in UI isolate: $e',
+          tag: 'App');
+    });
+  });
+
   DebugLogger().i('App initialized', tag: 'App');
 
   runApp(TempMonitorApp(
