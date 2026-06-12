@@ -34,7 +34,9 @@ android {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
         // flutter_local_notifications requires core library desugaring
-        isCoreLibraryDesugaringEnabled = true
+        // AGP 8.2 uses isCoreLibraryDesugaringEnabled (Kotlin DSL) or
+        // coreLibraryDesugaringEnabled (Groovy DSL). Use the Groovy form.
+        coreLibraryDesugaringEnabled true
     }
 
     defaultConfig {
