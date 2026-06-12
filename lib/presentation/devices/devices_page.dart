@@ -45,13 +45,13 @@ class _DevicesPageState extends State<DevicesPage> {
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.bluetooth_search),
-            tooltip: '重新扫描蓝牙设备',
+            icon: Icon(PhosphorIcons.bluetoothConnected()),
+            tooltip: '重新扫描',
             onPressed: () {
               FlutterBackgroundService().invoke('updateSettings');
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('已触发重新扫描，请在设置中开启模拟设备或确保蓝牙已开启'),
+                  content: Text('已触发重新扫描'),
                   duration: Duration(seconds: 3),
                 ),
               );
