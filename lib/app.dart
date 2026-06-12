@@ -33,7 +33,7 @@ class TempMonitorApp extends StatelessWidget {
         RepositoryProvider.value(value: settings),
         RepositoryProvider.value(value: notifications),
         if (readingStream != null)
-          RepositoryProvider<Stream<Reading>>.value(value: readingStream!),
+          Provider<Stream<Reading>>.value(value: readingStream!),
       ],
       child: MultiBlocProvider(
         providers: [
