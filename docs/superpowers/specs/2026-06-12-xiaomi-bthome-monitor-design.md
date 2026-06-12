@@ -29,7 +29,7 @@
 | 数据存储 | 本地 SQLite，自动滚动保留 |
 | 告警 | 温度/湿度越界时本地通知 |
 | 设备数量 | 先实现 1 个，架构预留多设备扩展 |
-| 扫描频率 | App 端可设置：1 秒 / 2 秒 / 5 秒 |
+| 扫描频率 | App 端可设置：1 秒 / 2 秒 / 5 秒，**默认 5 秒**；1 秒模式需提示高耗电 |
 | 手动刷新 | 支持下拉刷新 |
 | 构建方式 | GitHub Actions 自动构建 release APK |
 | 调试方式 | 内置日志页，支持导出为文本文件 |
@@ -43,8 +43,8 @@
 | 跨平台框架 | Flutter（Dart） |
 | BLE 扫描 | `flutter_blue_plus` |
 | BThome v2 解析 | 纯 Dart 模块 |
-| 本地数据库 | `drift`（类型安全，优先）或 `sqflite` |
-| 状态管理 | `flutter_bloc` 或 `Riverpod` |
+| 本地数据库 | `drift`（类型安全，带代码生成） |
+| 状态管理 | `flutter_bloc`（事件/状态流转清晰） |
 | 图表 | `fl_chart` |
 | 本地通知 | `flutter_local_notifications` |
 | 后台服务（Android） | `flutter_background_service` |
@@ -81,9 +81,10 @@
 
 1. **被动广播协议**：BThome v2 基于 BLE advertisement，无需维持连接，只需周期性扫描并解析广播包。
 2. **前台服务保活（Android）**：通过 `flutter_background_service` 启动前台服务，显示常驻通知，系统不易杀死。
-3. **iOS 合理预期**：iOS 后台蓝牙扫描受系统严格限制，采用"允许中断、启动后恢复"策略。
+3. **iOS 合理预期**：iOS 支持 `bluetooth-central` 后台模式，可以后台接收 BLE 广播结果，但系统会节流/挂起应用，扫描结果以"机会性投递"为主，无法保证固定间隔。采用"允许中断、启动后恢复"策略。
 4. **单一数据源**：SQLite 是 UI 和后台服务的唯一数据源，避免内存状态不一致。
-5. **多设备预留**：数据库 schema 和设备模型从第一天起支持多设备，即使 UI 初期只展示一个。
+5. **扫描频率与电量平衡**：默认扫描间隔为 5 秒；1 秒模式仅建议短期调试使用，选择时需明确提示高耗电风险。
+6. **多设备预留**：数据库 schema 和设备模型从第一天起支持多设备，即使 UI 初期只展示一个。
 
 ---
 
@@ -110,6 +111,22 @@ history_ui ──→ data_repository ──→ ble_scanner
 
 所有模块 ──→ debug_logger（用于记录日志）
 ```
+
+### 5.2 BThome v2 支持的 Object IDs
+
+`bthome_parser` 至少支持以下 Object ID（BThome v2 规范）：
+
+| Object ID | 含义 | 长度（字节） | 解析方式 | 单位 |
+|---|---|---|---|---|
+| 0x01 | 电池电量 | 1 | uint8 | % |
+| 0x02 | 温度 | 2 | int16，小端，缩放 0.01 | °C |
+| 0x03 | 湿度 | 2 | uint16，小端，缩放 0.01 | % |
+| 0x2A | 温度（高精度/扩展） | 2 | int16，小端，缩放 0.01 | °C |
+| 0x2B | 湿度（高精度/扩展） | 2 | uint16，小端，缩放 0.01 | % |
+
+- 每个广播包由多个 TLV 段组成： `[Object ID][Value]`。
+- 解析时按 ID 顺序读取，遇到未知 ID 可跳过或记录日志，不影响整体解析。
+- 初始版本假设广播包为**未加密**。如果后续固件启用了 BThome 加密，需要额外增加绑定密钥输入和解密模块。
 
 ---
 
@@ -144,7 +161,7 @@ history_ui ──→ data_repository ──→ ble_scanner
 App 进入后台
    ↓
 Android：启动 Foreground Service，持续扫描并显示"正在监控温湿度"通知
-iOS：保存状态，用户重新打开 App 时从数据库恢复历史
+iOS：声明 `bluetooth-central` 后台模式，系统会在有机会时投递扫描结果；用户重新打开 App 时从数据库恢复完整历史
    ↓
 用户重新打开 App → 从数据库读取完整历史，无缝衔接
 ```
@@ -168,6 +185,9 @@ CREATE TABLE devices (
     created_at INTEGER NOT NULL,  -- 创建时间（Unix 毫秒）
     last_seen_at INTEGER          -- 最后收到数据时间
 );
+-- 重新发现设备时执行 upsert：
+-- INSERT INTO devices (...) VALUES (...)
+-- ON CONFLICT(id) DO UPDATE SET last_seen_at = excluded.last_seen_at;
 
 -- 读数表
 CREATE TABLE readings (
@@ -211,12 +231,13 @@ CREATE INDEX idx_readings_device_time ON readings(device_id, recorded_at);
 | 场景 | 处理策略 |
 |---|---|
 | 蓝牙未开启 | 弹窗引导用户去系统设置打开；后台服务暂停扫描，等待蓝牙恢复 |
-| 定位权限未授予（Android） | 首次启动请求；若永久拒绝，提示"需要定位权限才能扫描蓝牙设备" |
-| 后台权限缺失 | Android 12+ 申请 `BLUETOOTH_SCAN` / `BLUETOOTH_CONNECT`；iOS 申请 `NSBluetoothAlwaysUsageDescription`；不足时降级为仅前台监控 |
+| 定位权限未授予（Android） | 首次启动请求 `Permission.locationWhenInUse`；若永久拒绝，提示"需要定位权限才能扫描蓝牙设备" |
+| 蓝牙扫描权限缺失（Android 12+） | 运行时请求 `Permission.bluetoothScan` 和 `Permission.bluetoothConnect`；使用 `permission_handler` 插件管理；若拒绝则降级为仅前台监控或提示用户 |
+| iOS 蓝牙后台权限缺失 | `Info.plist` 中声明 `NSBluetoothAlwaysUsageDescription` 和 `UIBackgroundModes: bluetooth-central`；用户拒绝时降级为仅前台监控 |
 | 扫描不到设备 | 5 分钟无数据时界面显示提示；调试日志记录扫描事件 |
 | BThome 解析失败 | 丢弃异常包并记录日志，不影响后续扫描 |
 | 数据库写入失败 | 捕获异常、记录日志、尝试重建数据库、前台提示"数据保存异常" |
-| 后台服务被系统杀死 | Android 用前台服务 + BOOT_COMPLETED 自启动；iOS 提供打开 App 后自动恢复 |
+| 后台服务被系统杀死 | Android：前台服务 + `AndroidManifest.xml` 声明 `RECEIVE_BOOT_COMPLETED` 权限和 `BroadcastReceiver`，实现开机自启动；iOS：`bluetooth-central` 后台模式，打开 App 后自动恢复历史 |
 | 异常读数 | 过滤超出物理合理范围的值，避免脏数据入库 |
 
 ---
@@ -268,7 +289,8 @@ CREATE INDEX idx_readings_device_time ON readings(device_id, recorded_at);
 | iOS 后台扫描被系统限制 | 后台数据可能不完整 | 优先保证 Android；iOS 作为"打开即刷新"体验 |
 | 无法使用真实 BLE 硬件本地调试 | 蓝牙相关问题需反复发版测试 | 完善日志、模拟设备模式、快速 CI 构建 |
 | 不同第三方 BThome 固件广播内容差异 | 解析失败 | 日志中记录原始 bytes，便于适配 |
-| 电量消耗 | 用户可能觉得耗电 | 提供扫描频率档位、允许用户权衡 |
+| BThome v2 加密广播 | 初始版本无法解析 | 本次范围假设未加密；若后续需要，增加绑定密钥输入和解密模块 |
+| 电量消耗 | 用户可能觉得耗电 | 默认 5 秒扫描间隔，1 秒模式明确提示高耗电 |
 
 ---
 
@@ -292,5 +314,5 @@ CREATE INDEX idx_readings_device_time ON readings(device_id, recorded_at);
 - [x] 扫描频率：App 端可设置
 - [x] 下拉刷新：需要
 - [x] 构建方式：GitHub Actions
-- [ ] 数据库选型最终确认：`drift`（推荐）还是 `sqflite`
-- [ ] 状态管理选型最终确认：`flutter_bloc`（推荐）还是 `Riverpod`
+- [x] 数据库选型：`drift`（类型安全，代码生成）
+- [x] 状态管理选型：`flutter_bloc`（事件/状态清晰）
