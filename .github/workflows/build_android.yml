@@ -37,10 +37,12 @@ jobs:
         run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Analyze
-        # Drift's generated app_database.g.dart emits 2 known infos we
-        # don't author; treat infos as non-fatal so CI doesn't break on
-        # codegen quirks. Real warnings/errors still fail the job.
-        run: flutter analyze --no-fatal-infos
+        # Drift's generated app_database.g.dart emits 2 unavoidable
+        # warnings (unnecessary_null_comparison,
+        # unnecessary_non_null_assertion). These are codegen artifacts,
+        # not code we author. Treat warnings as non-fatal; errors will
+        # still fail the job.
+        run: flutter analyze --no-fatal-warnings
 
       - name: Run unit tests
         run: flutter test
