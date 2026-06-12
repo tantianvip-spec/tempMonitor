@@ -32,15 +32,12 @@ void main() async {
   await notifications.initialize();
 
   await BackgroundService.initialize();
-  // Start the background service so it begins scanning immediately.
-  // flutter_background_service's autoStart only starts the service when
-  // the app is first installed; explicit startService() ensures it runs
-  // after every cold start.
-  await FlutterBackgroundService().startService();
 
   // Real-time push channel: background isolate sends Reading objects;
   // UI isolate receives them and forwards to a broadcast stream the
   // DashboardCubit can listen to.
+  // IMPORTANT: register the port BEFORE starting the service so the
+  // background isolate can find it on first tick.
   final receivePort = ReceivePort();
   IsolateNameServer.removePortNameMapping(AppConstants.uiIsolatePortName);
   IsolateNameServer.registerPortWithName(
@@ -48,6 +45,12 @@ void main() async {
     AppConstants.uiIsolatePortName,
   );
   final readingStream = receivePort.cast<Reading>().asBroadcastStream();
+
+  // Start the background service (scan loop, mock mode, etc.). Only
+  // start if not already running to avoid duplicate state.
+  if (!await FlutterBackgroundService().isRunning()) {
+    await FlutterBackgroundService().startService();
+  }
 
   // Save each incoming Reading into the UI-side database so the
   // reactive watchAllDevices() stream on the devices page fires.
