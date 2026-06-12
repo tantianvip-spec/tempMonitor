@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:provider/provider.dart';
@@ -42,6 +43,21 @@ class _DevicesPageState extends State<DevicesPage> {
       appBar: AppBar(
         title: const Text('设备列表'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.bluetooth_search),
+            tooltip: '重新扫描蓝牙设备',
+            onPressed: () {
+              FlutterBackgroundService().invoke('updateSettings');
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('已触发重新扫描，请在设置中开启模拟设备或确保蓝牙已开启'),
+                  duration: Duration(seconds: 3),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: StreamBuilder<List<Device>>(
         stream: repository.watchAllDevices(),

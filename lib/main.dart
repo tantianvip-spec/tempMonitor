@@ -2,6 +2,7 @@ import 'dart:isolate';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:provider/provider.dart';
 import 'package:temp_monitor/app.dart';
 import 'package:temp_monitor/core/constants.dart';
@@ -31,6 +32,11 @@ void main() async {
   await notifications.initialize();
 
   await BackgroundService.initialize();
+  // Start the background service so it begins scanning immediately.
+  // flutter_background_service's autoStart only starts the service when
+  // the app is first installed; explicit startService() ensures it runs
+  // after every cold start.
+  await FlutterBackgroundService().startService();
 
   // Real-time push channel: background isolate sends Reading objects;
   // UI isolate receives them and forwards to a broadcast stream the

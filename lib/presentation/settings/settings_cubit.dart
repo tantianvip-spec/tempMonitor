@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:temp_monitor/services/settings_service.dart';
 
@@ -21,9 +22,14 @@ class SettingsCubit extends Cubit<SettingsState> {
     ));
   }
 
+  void _notifyBackgroundService() {
+    FlutterBackgroundService().invoke('updateSettings');
+  }
+
   Future<void> setScanInterval(int seconds) async {
     await _settings.setScanIntervalSeconds(seconds);
     emit(state.copyWith(scanIntervalSeconds: seconds));
+    _notifyBackgroundService();
   }
 
   Future<void> setRetentionDays(int days) async {
@@ -35,17 +41,20 @@ class SettingsCubit extends Cubit<SettingsState> {
     await _settings.setTempMin(min);
     await _settings.setTempMax(max);
     emit(state.copyWith(tempMin: min, tempMax: max));
+    _notifyBackgroundService();
   }
 
   Future<void> setHumidityRange(double min, double max) async {
     await _settings.setHumidityMin(min);
     await _settings.setHumidityMax(max);
     emit(state.copyWith(humidityMin: min, humidityMax: max));
+    _notifyBackgroundService();
   }
 
   Future<void> setMockDeviceEnabled(bool enabled) async {
     await _settings.setMockDeviceEnabled(enabled);
     emit(state.copyWith(mockDeviceEnabled: enabled));
+    _notifyBackgroundService();
   }
 }
 
