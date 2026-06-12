@@ -81,7 +81,7 @@ class _DevicesPageState extends State<DevicesPage> {
     // devices page works even in test contexts that don't provide one.
     Stream<Reading>? readingStream;
     try {
-      readingStream = RepositoryProvider.of<Stream<Reading>>(context);
+      readingStream = Provider.of<Stream<Reading>>(context, listen: false);
     } catch (_) {
       // not registered — skip real-time wiring.
     }
