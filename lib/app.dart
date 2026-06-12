@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:temp_monitor/core/theme.dart';
 
 class TempMonitorApp extends StatelessWidget {
   const TempMonitorApp({super.key});
@@ -7,10 +8,9 @@ class TempMonitorApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: '温湿度监控',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.darkTheme(),
+      darkTheme: AppTheme.darkTheme(),
+      themeMode: ThemeMode.dark,
       home: const Scaffold(
         body: Center(child: Text('Temp Monitor')),
       ),
