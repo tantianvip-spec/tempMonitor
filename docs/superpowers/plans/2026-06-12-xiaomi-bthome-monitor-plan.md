@@ -834,6 +834,16 @@ git commit -m "feat: add debug logger with ring buffer and export"
 
 ## Task 6: Drift 本地数据库
 
+> ⚠️ **Plan correction — `AppDatabase.forTesting` constructor required.**
+> Tests on a headless Linux dev host cannot open a real `driftDatabase()`
+> (no platform binding for `path_provider`). Add a secondary constructor:
+> ```dart
+> AppDatabase.forTesting(super.executor);
+> ```
+> Test code injects `NativeDatabase.memory()` via this entry point. See
+> Task 7 for the full setup including the Linux `libsqlite3.so.0` loader
+> override.
+
 **Files:**
 - Create: `lib/data/tables.dart`
 - Create: `lib/data/app_database.dart`
@@ -1027,6 +1037,36 @@ git commit -m "feat: add drift database with devices, readings and settings DAOs
 ---
 
 ## Task 7: SensorRepository
+
+> ⚠️ **Plan correction — preserve `createdAt` on upsert.** A naive upsert
+> in `saveReading` that always writes `createdAt: DateTime.now()` silently
+> corrupts the "first seen" timestamp on every packet. Look up the
+> existing device first and reuse its `createdAt`:
+> ```dart
+> final existing = await _db.devicesDao.getDeviceById(reading.deviceId);
+> await _db.devicesDao.upsertDevice(DevicesCompanion(
+>   id: Value(reading.deviceId),
+>   name: Value(existing?.name ?? reading.deviceId),
+>   createdAt: Value(existing?.createdAt ??
+>       DateTime.now().millisecondsSinceEpoch),
+>   lastSeenAt: Value(DateTime.now().millisecondsSinceEpoch),
+> ));
+> ```
+> A regression test (`upsertDevice keeps existing createdAt when only
+> lastSeenAt changes`) guards against future regressions.
+>
+> ⚠️ **Plan correction — Linux test loader override.** Most Linux distros
+> ship `libsqlite3.so.0` but no unversioned symlink. Add to `setUpAll`:
+> ```dart
+> if (Platform.isLinux) {
+>   open.overrideFor(OperatingSystem.linux,
+>       () => DynamicLibrary.open('libsqlite3.so.0'));
+> }
+> ```
+> Requires `sqlite3: ^2.4.0` as an explicit `dev_dependency` in
+> `pubspec.yaml` — do NOT silence `depend_on_referenced_packages` for the
+> transitive import. Production unaffected (drift_flutter bundles sqlite3
+> via `sqlite3_flutter_libs` on device).
 
 **Files:**
 - Create: `lib/repositories/sensor_repository.dart`
@@ -1441,6 +1481,21 @@ git commit -m "feat: add shared preferences settings service"
 ---
 
 ## Task 11: 后台扫描服务
+
+> ⚠️ **Plan correction — `createEngine` helper, not `..tempMin = ...`.**
+> The first snippet mutates `final` fields on `ThresholdEngine` via
+> cascade setters, which won't compile. Use the second pattern shown in
+> the plan: a `ThresholdEngine createEngine() => ThresholdEngine(...)`
+> helper that returns a fresh engine, and reassign `thresholdEngine =
+> createEngine()` on each `updateSettings` event.
+>
+> ⚠️ **Plan correction — no `_uiSendPort` static field.** Cross-isolate
+> communication via a static is invisible to the background isolate (it
+> runs in a *separate* Dart isolate). The plan's `_uiSendPort` /
+> `setUiSendPort` pattern silently drops every reading. Use
+> `IsolateNameServer` instead — see Task 17's correction. Background
+> isolate calls `IsolateNameServer.lookupPortByName(...)`; UI side
+> registers the port in `main.dart`.
 
 **Files:**
 - Create: `lib/infrastructure/background_service.dart`
@@ -2648,6 +2703,51 @@ git commit -m "feat: add devices list page"
 
 ## Task 17: App 入口与依赖注入（应用已设定的 Theme）
 
+> ⚠️ **Plan correction — isolate port wiring via `IsolateNameServer`.**
+> The plan's reliance on `BackgroundService.setUiSendPort(SendPort)` (a
+> static setter) silently drops every reading because the background
+> service runs in a different Dart isolate from the UI. Replace with the
+> name-server pattern:
+> 1. Add `static const String uiIsolatePortName = 'temp_monitor_ui_port';`
+>    to `AppConstants` (`lib/core/constants.dart`).
+> 2. In `main.dart`, before `runApp`:
+>    ```dart
+>    final receivePort = ReceivePort();
+>    IsolateNameServer.removePortNameMapping(AppConstants.uiIsolatePortName);
+>    IsolateNameServer.registerPortWithName(
+>        receivePort.sendPort, AppConstants.uiIsolatePortName);
+>    final readingStream = receivePort.cast<Reading>().asBroadcastStream();
+>    ```
+>    Pass `readingStream` into `TempMonitorApp` via a
+>    `RepositoryProvider<Stream<Reading>>`.
+> 3. In `background_service.onStart`, look up the port lazily:
+>    ```dart
+>    SendPort? uiPort =
+>        IsolateNameServer.lookupPortByName(AppConstants.uiIsolatePortName);
+>    // ... per reading:
+>    uiPort ??= IsolateNameServer.lookupPortByName(AppConstants.uiIsolatePortName);
+>    uiPort?.send(reading);
+>    ```
+>    Delete `setUiSendPort` entirely.
+>
+> ⚠️ **Plan correction — `hide Reading` on the drift import.** drift
+> generates a `Reading` row class that collides with
+> `domain/models/reading.dart`. In `main.dart` and `background_service.dart`:
+> ```dart
+> import 'package:temp_monitor/data/app_database.dart' hide Reading;
+> ```
+>
+> ⚠️ **Plan correction — update `test/widget_test.dart`.** `TempMonitorApp`
+> now requires constructor params, so `const TempMonitorApp()` won't
+> compile. Rewrite the smoke test to inject in-memory stubs (see
+> Task 7's Linux sqlite loader + `AppDatabase.forTesting` pattern) and
+> assert on bottom-nav labels ('设备', '设置', '调试').
+>
+> ⚠️ **Plan correction — broadcast stream for multi-subscribe.** Multiple
+> `DashboardCubit` instances (one per device dashboard) may subscribe to
+> the reading stream. Use `.asBroadcastStream()` in `main.dart` so the
+> second subscription doesn't throw.
+
 **Files:**
 - Modify: `lib/main.dart`
 - Modify: `lib/app.dart`
@@ -2865,6 +2965,19 @@ git commit -m "chore: add iOS bluetooth and location permissions"
 
 ## Task 19: 模拟设备模式
 
+> ⚠️ **Plan correction — `_uiSendPort` no longer exists.** Task 17
+> eliminated the static `SendPort` field in favor of
+> `IsolateNameServer.lookupPortByName`. The mock path must use the same
+> pattern, i.e. pass readings through the shared `handleReading()` helper
+> already available in `background_service.dart`. Do NOT re-introduce
+> `setUiSendPort` — it wouldn't cross the isolate boundary anyway.
+>
+> ⚠️ **Plan correction — extract threshold evaluation into shared helper.**
+> The plan's code duplicates the threshold-check + alert pattern between
+> the mock branch and the real BLE branch. Extract a `handleReading()`
+> function that both branches call — ensures mock mode exercises the same
+> notification path as live scanning.
+
 **Files:**
 - Create: `lib/infrastructure/mock_sensor.dart`
 - Modify: `lib/infrastructure/background_service.dart`
@@ -3076,6 +3189,30 @@ git commit -m "feat: add runtime permission handling"
 ---
 
 ## Task 22: 集成测试与最终验证
+
+> ⚠️ **Plan correction — assert on actual UI strings.** The plan's
+> expectation `find.text('设备列表')` matches the *AppBar title* of
+> `DevicesPage`, not a bottom-nav label. With the implemented bottom nav
+> (Task 17), the most stable assertions are:
+> ```dart
+> expect(find.text('设备列表'), findsOneWidget); // AppBar of DevicesPage
+> expect(find.text('设置'), findsOneWidget);     // bottom nav
+> expect(find.text('调试'), findsOneWidget);     // bottom nav
+> ```
+>
+> ⚠️ **Plan correction — `flutter test` is not the right runner.** The
+> integration test needs a connected device or emulator:
+> ```
+> flutter test integration_test/app_test.dart
+> ```
+> NOT plain `flutter test` (which is the host-only runner and can't
+> initialize plugins like BLE / notifications / background service).
+>
+> ⚠️ **Plan correction — `flutter build apk --release` needs a keystore.**
+> The "final verification" step won't succeed without signing key plumbing.
+> CI (Task 20) was set up to build the *debug* APK to side-step this. To
+> ship a real release APK, add `android/key.properties` + a keystore
+> secret to GitHub Actions later.
 
 **Files:**
 - Create: `integration_test/app_test.dart`
