@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +11,7 @@ import 'package:temp_monitor/infrastructure/permission_service.dart';
 import 'package:temp_monitor/presentation/dashboard/dashboard_cubit.dart';
 import 'package:temp_monitor/presentation/dashboard/dashboard_page.dart';
 import 'package:temp_monitor/repositories/sensor_repository.dart';
+import 'package:temp_monitor/services/scan_service.dart';
 
 class DevicesPage extends StatefulWidget {
   const DevicesPage({super.key});
@@ -48,7 +48,7 @@ class _DevicesPageState extends State<DevicesPage> {
             icon: Icon(PhosphorIcons.bluetoothConnected()),
             tooltip: '重新扫描',
             onPressed: () {
-              FlutterBackgroundService().invoke('updateSettings');
+              context.read<ScanService>().restart();
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('已触发重新扫描'),

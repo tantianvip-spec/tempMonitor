@@ -10,6 +10,7 @@ import 'package:temp_monitor/presentation/devices/devices_page.dart';
 import 'package:temp_monitor/presentation/settings/settings_cubit.dart';
 import 'package:temp_monitor/presentation/settings/settings_page.dart';
 import 'package:temp_monitor/repositories/sensor_repository.dart';
+import 'package:temp_monitor/services/scan_service.dart';
 import 'package:temp_monitor/services/settings_service.dart';
 
 class TempMonitorApp extends StatelessWidget {
@@ -17,12 +18,14 @@ class TempMonitorApp extends StatelessWidget {
   final SettingsService settings;
   final NotificationService notifications;
   final Stream<Reading>? readingStream;
+  final ScanService scanService;
 
   const TempMonitorApp({
     super.key,
     required this.repository,
     required this.settings,
     required this.notifications,
+    required this.scanService,
     this.readingStream,
   });
 
@@ -33,12 +36,13 @@ class TempMonitorApp extends StatelessWidget {
         RepositoryProvider.value(value: repository),
         RepositoryProvider.value(value: settings),
         RepositoryProvider.value(value: notifications),
+        RepositoryProvider.value(value: scanService),
         if (readingStream != null)
           Provider<Stream<Reading>>.value(value: readingStream!),
       ],
       child: MultiBlocProvider(
         providers: [
-          BlocProvider(create: (_) => SettingsCubit(settings)),
+          BlocProvider(create: (_) => SettingsCubit(settings, scanService)),
         ],
         child: MaterialApp(
           title: '温湿度监控',
