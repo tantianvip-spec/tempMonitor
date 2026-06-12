@@ -13,6 +13,26 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+// Flutter library subprojects (e.g., flutter_blue_plus_android) reference
+// flutter.compileSdkVersion in their build.gradle but the Flutter Gradle
+// Plugin only injects the "flutter" extension into the :app module.
+// Provide a fallback so library modules don't fail to resolve it.
+//
+// See: https://github.com/chipweinberger/flutter_blue_plus/issues
+subprojects {
+    if (project.name != "app" && project.extensions.findByName("flutter") == null) {
+        project.extensions.create("flutter", FlutterLibraryExtension)
+    }
+}
+
+class FlutterLibraryExtension {
+    // Values must match packages/flutter_tools/gradle/src/main/groovy/flutter.groovy
+    int compileSdkVersion = 34
+    int minSdkVersion = 21
+    int targetSdkVersion = 34
+    String ndkVersion = "23.1.7779620"
+}
+
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
