@@ -4,12 +4,33 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:temp_monitor/core/theme.dart';
 import 'package:temp_monitor/domain/models/device.dart';
 import 'package:temp_monitor/domain/models/reading.dart';
+import 'package:temp_monitor/infrastructure/debug_logger.dart';
+import 'package:temp_monitor/infrastructure/permission_service.dart';
 import 'package:temp_monitor/presentation/dashboard/dashboard_cubit.dart';
 import 'package:temp_monitor/presentation/dashboard/dashboard_page.dart';
 import 'package:temp_monitor/repositories/sensor_repository.dart';
 
-class DevicesPage extends StatelessWidget {
+class DevicesPage extends StatefulWidget {
   const DevicesPage({super.key});
+
+  @override
+  State<DevicesPage> createState() => _DevicesPageState();
+}
+
+class _DevicesPageState extends State<DevicesPage> {
+  @override
+  void initState() {
+    super.initState();
+    _requestPermissions();
+  }
+
+  Future<void> _requestPermissions() async {
+    final bleGranted = await PermissionService.requestBlePermissions();
+    final notifGranted = await PermissionService.requestNotificationPermission();
+    if (!bleGranted || !notifGranted) {
+      DebugLogger().w('Some runtime permissions were denied', tag: 'DevicesPage');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
