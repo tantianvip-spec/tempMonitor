@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:temp_monitor/app.dart';
@@ -9,6 +11,20 @@ import 'package:temp_monitor/services/scan_service.dart';
 import 'package:temp_monitor/services/settings_service.dart';
 
 void main() async {
+  // Catch and log ALL errors — including widget-layer crashes — so we
+  // can see what's going wrong even if the app keeps crashing.
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    DebugLogger().e(
+      'FlutterError: ${details.exception}\n${details.stack}',
+      tag: 'App',
+    );
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    DebugLogger().e('Platform error: $error\n$stack', tag: 'App');
+    return true;
+  };
+
   WidgetsFlutterBinding.ensureInitialized();
 
   // We use Provider<Stream<Reading>> only to pass a Stream reference
@@ -16,7 +32,13 @@ void main() async {
   // rebuilds. The debug assertion is a false positive here.
   Provider.debugCheckInvalidValueType = null;
 
-  final database = AppDatabase();
+  AppDatabase? database;
+  try {
+    database = AppDatabase();
+  } catch (e) {
+    DebugLogger().e('Failed to open database: $e', tag: 'App');
+    rethrow;
+  }
   final repository = SensorRepository(database);
 
   final settings = SettingsService();
@@ -31,8 +53,8 @@ void main() async {
     notifications: notifications,
   );
 
-  // Start scanning immediately (mock or real BLE based on settings).
-  scanService.start();
+  // Do NOT auto-start scanning here. The user must explicitly start it
+  // from the devices page. This avoids any BLE / mock crash during boot.
 
   DebugLogger().i('App initialized', tag: 'App');
 
