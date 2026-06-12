@@ -7,4 +7,5 @@ abstract class AppConstants {
   static const double defaultHumidityMin = 20.0;
   static const double defaultHumidityMax = 80.0;
   static const int maxLogEntries = 1000;
+  static const String uiIsolatePortName = 'temp_monitor_ui_port';
 }

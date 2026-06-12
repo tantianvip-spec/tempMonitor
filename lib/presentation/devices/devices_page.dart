@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:temp_monitor/core/theme.dart';
 import 'package:temp_monitor/domain/models/device.dart';
+import 'package:temp_monitor/domain/models/reading.dart';
 import 'package:temp_monitor/presentation/dashboard/dashboard_cubit.dart';
 import 'package:temp_monitor/presentation/dashboard/dashboard_page.dart';
 import 'package:temp_monitor/repositories/sensor_repository.dart';
@@ -53,12 +54,24 @@ class DevicesPage extends StatelessWidget {
     SensorRepository repository,
     Device device,
   ) {
+    // readingStream is an optional provider registered only when the
+    // background isolate is active. Use a try-get pattern so the
+    // devices page works even in test contexts that don't provide one.
+    Stream<Reading>? readingStream;
+    try {
+      readingStream = RepositoryProvider.of<Stream<Reading>>(context);
+    } catch (_) {
+      // not registered — skip real-time wiring.
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => BlocProvider(
-          create: (_) =>
-              DashboardCubit(repository)..loadLatest(device.id),
+          create: (_) => DashboardCubit(
+            repository,
+            readingStream: readingStream,
+          )..loadLatest(device.id),
           child: DashboardPage(deviceId: device.id),
         ),
       ),

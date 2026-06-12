@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:temp_monitor/core/constants.dart';
 import 'package:temp_monitor/data/app_database.dart';
 import 'package:temp_monitor/domain/services/threshold_engine.dart';
 import 'package:temp_monitor/infrastructure/ble_scanner.dart';
@@ -13,8 +14,6 @@ import 'package:temp_monitor/repositories/sensor_repository.dart';
 import 'package:temp_monitor/services/settings_service.dart';
 
 class BackgroundService {
-  static SendPort? _uiSendPort;
-
   static Future<void> initialize() async {
     final service = FlutterBackgroundService();
     await service.configure(
@@ -62,6 +61,12 @@ class BackgroundService {
 
     var thresholdEngine = createEngine();
 
+    // The UI side registers a ReceivePort under this name on launch.
+    // Look it up lazily and re-lookup each tick in case the UI was
+    // hot-restarted and re-registered the port.
+    SendPort? uiPort =
+        IsolateNameServer.lookupPortByName(AppConstants.uiIsolatePortName);
+
     Timer? scanTimer;
 
     void startScanning() {
@@ -72,7 +77,9 @@ class BackgroundService {
           await for (final reading
               in scanner.scan(timeout: const Duration(seconds: 2))) {
             await repository.saveReading(reading);
-            _uiSendPort?.send(reading);
+            uiPort ??= IsolateNameServer.lookupPortByName(
+                AppConstants.uiIsolatePortName);
+            uiPort?.send(reading);
 
             final state = thresholdEngine.evaluate(
               temperature: reading.temperature,
@@ -105,9 +112,5 @@ class BackgroundService {
     });
 
     startScanning();
-  }
-
-  static void setUiSendPort(SendPort sendPort) {
-    _uiSendPort = sendPort;
   }
 }

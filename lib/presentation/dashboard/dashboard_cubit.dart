@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:temp_monitor/domain/models/reading.dart';
@@ -5,8 +7,12 @@ import 'package:temp_monitor/repositories/sensor_repository.dart';
 
 class DashboardCubit extends Cubit<DashboardState> {
   final SensorRepository _repository;
+  final Stream<Reading>? _readingStream;
+  StreamSubscription<Reading>? _subscription;
 
-  DashboardCubit(this._repository) : super(const DashboardState());
+  DashboardCubit(this._repository, {Stream<Reading>? readingStream})
+      : _readingStream = readingStream,
+        super(const DashboardState());
 
   Future<void> loadLatest(String deviceId) async {
     emit(state.copyWith(status: DashboardStatus.loading));
@@ -16,6 +22,14 @@ class DashboardCubit extends Cubit<DashboardState> {
         status: DashboardStatus.loaded,
         latestReading: reading,
       ));
+      // Subscribe to real-time pushes from the background isolate now
+      // that we know which device this dashboard is bound to. Skip if a
+      // subscription was already set up for a previous load.
+      if (_subscription == null && _readingStream != null) {
+        _subscription = _readingStream!
+            .where((r) => r.deviceId == deviceId)
+            .listen(onNewReading);
+      }
     } catch (e) {
       emit(state.copyWith(
         status: DashboardStatus.error,
@@ -29,6 +43,12 @@ class DashboardCubit extends Cubit<DashboardState> {
       status: DashboardStatus.loaded,
       latestReading: reading,
     ));
+  }
+
+  @override
+  Future<void> close() async {
+    await _subscription?.cancel();
+    return super.close();
   }
 }
 

@@ -1,20 +1,48 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures to the child widget in the widget tree, read text, and verify that
-// the values of widget properties are correct.
+import 'dart:ffi';
+import 'dart:io';
 
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqlite3/open.dart';
 import 'package:temp_monitor/app.dart';
+import 'package:temp_monitor/data/app_database.dart';
+import 'package:temp_monitor/infrastructure/notification_service.dart';
+import 'package:temp_monitor/repositories/sensor_repository.dart';
+import 'package:temp_monitor/services/settings_service.dart';
 
 void main() {
-  testWidgets('App renders smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const TempMonitorApp());
+  setUpAll(() {
+    if (Platform.isLinux) {
+      open.overrideFor(
+        OperatingSystem.linux,
+        () => DynamicLibrary.open('libsqlite3.so.0'),
+      );
+    }
+    SharedPreferences.setMockInitialValues({});
+  });
 
-    // Verify that our app renders.
-    expect(find.text('Temp Monitor'), findsOneWidget);
+  testWidgets('App boots with main navigation', (tester) async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    final repo = SensorRepository(db);
+    final settings = SettingsService();
+    await settings.initialize();
+    final notifications = NotificationService();
+    // Skip notifications.initialize() — flutter_local_notifications needs
+    // platform binding for plugin registration. The widget tree doesn't
+    // depend on the plugin being initialized for the boot smoke test.
+
+    await tester.pumpWidget(TempMonitorApp(
+      repository: repo,
+      settings: settings,
+      notifications: notifications,
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('设备'), findsOneWidget);
+    expect(find.text('设置'), findsOneWidget);
+    expect(find.text('调试'), findsOneWidget);
+
+    await db.close();
   });
 }
