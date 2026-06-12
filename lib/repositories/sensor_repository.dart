@@ -1,0 +1,106 @@
+import 'package:drift/drift.dart';
+import 'package:temp_monitor/core/constants.dart';
+import 'package:temp_monitor/data/app_database.dart';
+import 'package:temp_monitor/domain/models/device.dart' as domain;
+import 'package:temp_monitor/domain/models/reading.dart' as domain;
+import 'package:temp_monitor/infrastructure/debug_logger.dart';
+
+class SensorRepository {
+  final AppDatabase _db;
+
+  SensorRepository(this._db);
+
+  Stream<List<domain.Device>> watchAllDevices() {
+    final query = _db.select(_db.devices)
+      ..orderBy([
+        (d) => OrderingTerm(
+              expression: d.lastSeenAt,
+              mode: OrderingMode.desc,
+            )
+      ]);
+    return query.watch().map((rows) => rows.map(_mapDevice).toList());
+  }
+
+  Future<void> saveReading(domain.Reading reading) async {
+    final existing = await _db.devicesDao.getDeviceById(reading.deviceId);
+    await _db.devicesDao.upsertDevice(
+      DevicesCompanion(
+        id: Value(reading.deviceId),
+        name: Value(existing?.name ?? reading.deviceId),
+        createdAt: Value(
+            existing?.createdAt ?? DateTime.now().millisecondsSinceEpoch),
+        lastSeenAt: Value(DateTime.now().millisecondsSinceEpoch),
+      ),
+    );
+
+    await _db.readingsDao.insertReading(
+      ReadingsCompanion(
+        deviceId: Value(reading.deviceId),
+        temperature: Value(reading.temperature),
+        humidity: Value(reading.humidity),
+        battery: Value(reading.battery),
+        rssi: Value(reading.rssi),
+        recordedAt: Value(reading.recordedAt.millisecondsSinceEpoch),
+      ),
+    );
+
+    await _cleanupOldData();
+    DebugLogger().i(
+      'Saved reading: ${reading.temperature}°C, ${reading.humidity}%',
+      tag: 'Repository',
+    );
+  }
+
+  Future<List<domain.Reading>> getReadingsForDevice(
+    String deviceId, {
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final rows = await _db.readingsDao
+        .getReadingsForDevice(deviceId, from: from, to: to);
+    return rows.map(_mapReading).toList();
+  }
+
+  Future<domain.Reading?> getLatestReading(String deviceId) async {
+    final row = await _db.readingsDao.getLatestReading(deviceId);
+    return row == null ? null : _mapReading(row);
+  }
+
+  Future<void> renameDevice(String deviceId, String name) async {
+    await _db.devicesDao.upsertDevice(
+      DevicesCompanion(
+        id: Value(deviceId),
+        name: Value(name),
+        createdAt: Value(DateTime.now().millisecondsSinceEpoch),
+      ),
+    );
+  }
+
+  Future<void> _cleanupOldData() async {
+    const days = AppConstants.defaultRetentionDays;
+    final cutoff = DateTime.now().subtract(const Duration(days: days));
+    final deleted = await _db.readingsDao.deleteReadingsBefore(cutoff);
+    if (deleted > 0) {
+      DebugLogger().i('Cleaned up $deleted old readings', tag: 'Repository');
+    }
+  }
+
+  domain.Device _mapDevice(Device row) => domain.Device(
+        id: row.id,
+        name: row.name,
+        createdAt: DateTime.fromMillisecondsSinceEpoch(row.createdAt),
+        lastSeenAt: row.lastSeenAt == null
+            ? null
+            : DateTime.fromMillisecondsSinceEpoch(row.lastSeenAt!),
+      );
+
+  domain.Reading _mapReading(Reading row) => domain.Reading(
+        deviceId: row.deviceId,
+        temperature: row.temperature,
+        humidity: row.humidity,
+        battery: row.battery,
+        rssi: row.rssi,
+        recordedAt:
+            DateTime.fromMillisecondsSinceEpoch(row.recordedAt).toUtc(),
+      );
+}

@@ -1,0 +1,61 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main, master, implement]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Run code generation (drift)
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Analyze
+        # Drift's generated app_database.g.dart emits 2 unavoidable
+        # warnings (unnecessary_null_comparison,
+        # unnecessary_non_null_assertion). These are codegen artifacts,
+        # not code we author. Treat warnings as non-fatal; errors will
+        # still fail the job.
+        run: flutter analyze --no-fatal-warnings
+
+      - name: Run unit tests
+        run: flutter test
+
+      # Debug APK avoids signing-key plumbing in CI; users can promote
+      # to a signed release build by adding a keystore secret later.
+      - name: Build debug APK
+        run: flutter build apk --debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: temp-monitor-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
