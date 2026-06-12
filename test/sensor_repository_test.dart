@@ -3,9 +3,6 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-// `sqlite3` ships transitively via `drift`; we depend on it only inside this
-// test to point the loader at the SONAME-versioned Linux library.
-// ignore: depend_on_referenced_packages
 import 'package:sqlite3/open.dart';
 import 'package:temp_monitor/data/app_database.dart' show AppDatabase;
 import 'package:temp_monitor/domain/models/reading.dart';

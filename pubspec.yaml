@@ -32,6 +32,11 @@ dev_dependencies:
   flutter_lints: ^4.0.0
   drift_dev: ^2.18.0
   build_runner: ^2.4.11
+  # Used only by `test/sensor_repository_test.dart` on Linux dev hosts to
+  # point the loader at `libsqlite3.so.0` (the SONAME-versioned library
+  # most distros ship). On-device, drift_flutter bundles sqlite3 via
+  # sqlite3_flutter_libs, so this is dev/CI only.
+  sqlite3: ^2.4.0
 
 flutter:
   uses-material-design: true
