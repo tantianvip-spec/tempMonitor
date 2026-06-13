@@ -93,9 +93,10 @@ class _DevicesPageState extends State<DevicesPage> {
       appBar: AppBar(
         title: const Text('设备列表'),
         centerTitle: true,
+        automaticallyImplyLeading: false,
         actions: [
           IconButton(
-            icon: Icon(PhosphorIcons.bluetoothSlash()),
+            icon: Icon(PhosphorIcons.bluetooth()),
             tooltip: '扫描附近设备',
             onPressed: () => _scaffoldKey.currentState?.openDrawer(),
           ),
@@ -120,14 +121,16 @@ class _DevicesPageState extends State<DevicesPage> {
           }
 
           return ListView(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             children: [
-              const _SectionHeader(title: '已配对的设备'),
-              ...savedDevices.map((device) => _DeviceTile(
-                    device: device,
-                    onTap: () =>
-                        _openDashboard(context, repository, device),
-                  )),
+              ...savedDevices.map((device) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _DeviceCard(
+                      device: device,
+                      onTap: () =>
+                          _openDashboard(context, repository, device),
+                    ),
+              )),
             ],
           );
         },
@@ -431,65 +434,115 @@ class _NearbyDeviceTile extends StatelessWidget {
   }
 }
 
-class _DeviceTile extends StatelessWidget {
+class _DeviceCard extends StatelessWidget {
   final Device device;
   final VoidCallback onTap;
 
-  const _DeviceTile({required this.device, required this.onTap});
+  const _DeviceCard({required this.device, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final repository = context.read<SensorRepository>();
 
-    return ListTile(
+    return GestureDetector(
       onTap: onTap,
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: AppTheme.bgTertiary,
-          borderRadius: BorderRadius.circular(10),
+      child: Card(
+        color: AppTheme.bgSecondary,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: AppTheme.border, width: 1),
         ),
-        alignment: Alignment.center,
-        child: Icon(
-          PhosphorIcons.thermometer(),
-          color: AppTheme.accentTemp,
-          size: 22,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              // Device icon
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppTheme.bgTertiary,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  PhosphorIcons.thermometer(),
+                  color: AppTheme.accentTemp,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 14),
+
+              // Name + latest reading
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      device.name,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    FutureBuilder<Reading?>(
+                      future: repository.getLatestReading(device.id),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Text(
+                            '加载中…',
+                            style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                          );
+                        }
+                        final reading = snapshot.data;
+                        if (reading == null) {
+                          return const Text(
+                            '暂无数据',
+                            style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                          );
+                        }
+                        return Row(
+                          children: [
+                            const Icon(Icons.thermostat, size: 13, color: AppTheme.accentTemp),
+                            const SizedBox(width: 3),
+                            Text(
+                              reading.temperature.toTempString(),
+                              style: const TextStyle(
+                                color: AppTheme.accentTemp,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Icon(Icons.water_drop, size: 13, color: AppTheme.accentHumidity),
+                            const SizedBox(width: 3),
+                            Text(
+                              reading.humidity.toHumidityString(),
+                              style: const TextStyle(
+                                color: AppTheme.accentHumidity,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+
+              // Chevron
+              const Icon(
+                Icons.chevron_right,
+                color: AppTheme.textMuted,
+                size: 22,
+              ),
+            ],
+          ),
         ),
-      ),
-      title: Text(
-        device.name,
-        style: const TextStyle(
-          color: AppTheme.textPrimary,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      subtitle: FutureBuilder<Reading?>(
-        future: repository.getLatestReading(device.id),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Text(
-              '加载中…',
-              style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
-            );
-          }
-          final reading = snapshot.data;
-          if (reading == null) {
-            return const Text(
-              '暂无数据',
-              style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
-            );
-          }
-          final ago = reading.recordedAt.toAgoString();
-          return Text(
-            '$ago · ${reading.temperature.toTempString()} · ${reading.humidity.toHumidityString()}',
-            style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
-          );
-        },
-      ),
-      trailing: const Icon(
-        Icons.chevron_right,
-        color: AppTheme.textMuted,
       ),
     );
   }
@@ -551,27 +604,6 @@ class _EmptyState extends StatelessWidget {
               child: const Text('重新启动扫描', style: TextStyle(color: AppTheme.textMuted)),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  const _SectionHeader({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: AppTheme.textMuted,
-          letterSpacing: 0.5,
         ),
       ),
     );
