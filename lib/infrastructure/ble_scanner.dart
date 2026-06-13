@@ -27,7 +27,6 @@ class BleScanner {
   DateTime? _lastBluetoothOffLog;
   bool _initialized = false;
   bool _scanning = false;
-  StreamSubscription? _scanSubscription;
 
   /// Stream of scan results emitted after each scan window.
   final _scanResultsController =
@@ -80,69 +79,64 @@ class BleScanner {
     final scanTimeout = timeout ?? const Duration(seconds: 4);
     _scanning = true;
 
-    // Collect results in real time from onScanResult.
+    // Real-time listener for nearby devices display.
     final nearbyDevices = <NearbyDevice>[];
     final bthomeReadings = <Reading>[];
-
-    _scanSubscription?.cancel();
-    _scanSubscription = FlutterBluePlus.onScanResults.listen((results) {
-      final now = DateTime.now();
-      for (final result in results) {
-        _processResult(result, now, nearbyDevices, bthomeReadings);
-      }
-    });
+    StreamSubscription? rtSub;
 
     try {
-      await FlutterBluePlus.startScan(
-        timeout: scanTimeout,
-      );
+      rtSub = FlutterBluePlus.scanResults.listen((results) {
+        final now = DateTime.now();
+        for (final result in results) {
+          _updateNearby(result, now, nearbyDevices);
+        }
+      });
 
-      // Wait for scan to complete.
+      await FlutterBluePlus.startScan(timeout: scanTimeout);
       await Future.delayed(scanTimeout + const Duration(seconds: 1));
     } finally {
       _scanning = false;
-      _scanSubscription?.cancel();
-      _scanSubscription = null;
+      await rtSub?.cancel();
       try {
         await FlutterBluePlus.stopScan();
       } catch (_) {}
     }
 
-    // Wait a short moment for any remaining onScanResult callbacks.
-    await Future.delayed(const Duration(milliseconds: 200));
+    // Parse BThome data from lastScanResults (one shot, most recent per device).
+    final now = DateTime.now();
+    for (final result in FlutterBluePlus.lastScanResults) {
+      _parseBThome(result, now, bthomeReadings);
+    }
 
     _scanResultsController.add(ScanResultBundle(
-      nearbyDevices: List.from(nearbyDevices),
-      bthomeReadings: List.from(bthomeReadings),
+      nearbyDevices: nearbyDevices,
+      bthomeReadings: bthomeReadings,
     ));
 
-    // Forward BThome readings to the handler set by ScanService.
     for (final reading in bthomeReadings) {
       onReading?.call(reading);
     }
   }
 
-  void _processResult(
+  /// Update the nearby-devices list from a scan result (real-time display).
+  void _updateNearby(
     ScanResult result,
     DateTime now,
     List<NearbyDevice> nearbyDevices,
-    List<Reading> bthomeReadings,
   ) {
     final deviceId = result.device.remoteId.str;
-    final rssi = result.rssi;
-
-    // Check if this device has BThome service data.
     final serviceData = result.advertisementData.serviceData;
     final guid = Guid(AppConstants.bthomeServiceUuid);
     final bytes = serviceData[guid];
     final isBThome = bytes != null && bytes.isNotEmpty;
 
-    // Update nearby list — replace existing or append.
-    final existingIdx = nearbyDevices.indexWhere((d) => d.deviceId == deviceId);
+    final existingIdx =
+        nearbyDevices.indexWhere((d) => d.deviceId == deviceId);
     final nearby = NearbyDevice(
       deviceId: deviceId,
-      name: result.device.advName.isNotEmpty ? result.device.advName : null,
-      rssi: rssi,
+      name:
+          result.device.advName.isNotEmpty ? result.device.advName : null,
+      rssi: result.rssi,
       isBThomeCompatible: isBThome,
       lastSeen: now,
     );
@@ -151,9 +145,19 @@ class BleScanner {
     } else {
       nearbyDevices.add(nearby);
     }
+  }
 
-    // Parse BThome data if present.
-    if (!isBThome) return;
+  /// Try to parse BThome data from a single scan result.
+  void _parseBThome(
+    ScanResult result,
+    DateTime now,
+    List<Reading> bthomeReadings,
+  ) {
+    final deviceId = result.device.remoteId.str;
+    final serviceData = result.advertisementData.serviceData;
+    final guid = Guid(AppConstants.bthomeServiceUuid);
+    final bytes = serviceData[guid];
+    if (bytes == null || bytes.isEmpty) return;
 
     final lastSeen = _lastSeen[deviceId];
     if (lastSeen != null && now.difference(lastSeen) < _debounceDuration) {
@@ -163,7 +167,7 @@ class BleScanner {
       final reading = BThomeParser.parse(
         bytes,
         deviceId: deviceId,
-        rssi: rssi,
+        rssi: result.rssi,
       );
       _lastSeen[deviceId] = now;
       bthomeReadings.add(reading);
