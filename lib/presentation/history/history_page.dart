@@ -25,7 +25,7 @@ class HistoryPage extends StatelessWidget {
                 }
                 return Padding(
                   padding: const EdgeInsets.all(16),
-                  child: HistoryChart(readings: state.readings),
+                  child: HistoryChart(readings: state.readings, range: state.range),
                 );
               },
             ),

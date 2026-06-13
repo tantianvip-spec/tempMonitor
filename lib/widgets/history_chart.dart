@@ -2,13 +2,20 @@ import 'dart:math';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:temp_monitor/core/theme.dart';
 import 'package:temp_monitor/domain/models/reading.dart';
+import 'package:temp_monitor/presentation/history/history_cubit.dart';
 
 class HistoryChart extends StatelessWidget {
   final List<Reading> readings;
+  final HistoryRange range;
 
-  const HistoryChart({super.key, required this.readings});
+  const HistoryChart({
+    super.key,
+    required this.readings,
+    required this.range,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -20,6 +27,11 @@ class HistoryChart extends StatelessWidget {
           color: AppTheme.textMuted,
         );
 
+    final times = readings.map((r) => r.recordedAt.millisecondsSinceEpoch.toDouble()).toList();
+    final timeMin = times.reduce((a, b) => a < b ? a : b);
+    final timeMax = times.reduce((a, b) => a > b ? a : b);
+    final timeSpan = timeMax - timeMin;
+    // Normalize X to [0, timeSpan] so fl_chart has manageable numbers.
     final temps = readings.map((r) => r.temperature).toList();
     final hums = readings.map((r) => r.humidity).toList();
 
@@ -32,6 +44,9 @@ class HistoryChart extends StatelessWidget {
           icon: Icons.thermostat,
           chart: _buildChart(
             values: temps,
+            times: times,
+            timeMin: timeMin,
+            timeSpan: timeSpan,
             color: AppTheme.accentTemp,
             axisLabelStyle: axisLabelStyle,
             unitLabel: '°C',
@@ -44,6 +59,9 @@ class HistoryChart extends StatelessWidget {
           icon: Icons.water_drop,
           chart: _buildChart(
             values: hums,
+            times: times,
+            timeMin: timeMin,
+            timeSpan: timeSpan,
             color: AppTheme.accentHumidity,
             axisLabelStyle: axisLabelStyle,
             unitLabel: '%',
@@ -54,19 +72,41 @@ class HistoryChart extends StatelessWidget {
     );
   }
 
+  /// Format a normalized X value (0..timeSpan) back to a time label.
+  String _formatX(double normalizedX, double timeMin) {
+    final ms = timeMin + normalizedX;
+    final dt = DateTime.fromMillisecondsSinceEpoch(ms.toInt());
+    switch (range) {
+      case HistoryRange.day:
+        return DateFormat('HH:mm').format(dt);
+      case HistoryRange.week:
+      case HistoryRange.month:
+        return DateFormat('M/d').format(dt);
+    }
+  }
+
   Widget _buildChart({
     required List<double> values,
+    required List<double> times,
+    required double timeMin,
+    required double timeSpan,
     required Color color,
     required TextStyle? axisLabelStyle,
     required String unitLabel,
   }) {
-    final spots = values.asMap().entries.map((e) {
-      return FlSpot(e.key.toDouble(), e.value);
-    }).toList();
+    final spots = List.generate(values.length, (i) {
+      return FlSpot(
+        times[i] - timeMin, // normalize to 0
+        values[i],
+      );
+    });
+
+    // Compute nice X tick interval
+    final xInterval = _niceXInterval(timeSpan);
 
     final minY = _computeMin(values);
     final maxY = _computeMax(values);
-    final interval = _niceInterval(minY, maxY);
+    final yInterval = _niceInterval(minY, maxY);
     final peakIndices = _findPeaks(values);
     final troughIndices = _findTroughs(values);
     final peaks = peakIndices.toSet();
@@ -79,9 +119,15 @@ class HistoryChart extends StatelessWidget {
         clipData: const FlClipData.all(),
         gridData: FlGridData(
           show: true,
-          drawVerticalLine: false,
-          horizontalInterval: interval,
+          drawVerticalLine: true,
+          horizontalInterval: yInterval,
+          verticalInterval: xInterval,
           getDrawingHorizontalLine: (_) => const FlLine(
+            color: AppTheme.gridLine,
+            strokeWidth: 1,
+            dashArray: [4, 4],
+          ),
+          getDrawingVerticalLine: (_) => const FlLine(
             color: AppTheme.gridLine,
             strokeWidth: 1,
             dashArray: [4, 4],
@@ -101,15 +147,36 @@ class HistoryChart extends StatelessWidget {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 52,
-              interval: interval,
+              interval: yInterval,
               getTitlesWidget: (value, meta) => Text(
                 value.toStringAsFixed(2),
                 style: axisLabelStyle,
               ),
             ),
           ),
-          bottomTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
+          bottomTitles: AxisTitles(
+            axisNameWidget: Text(
+              switch (range) {
+                HistoryRange.day => '时间',
+                HistoryRange.week || HistoryRange.month => '日期',
+              },
+              style: axisLabelStyle,
+            ),
+            axisNameSize: 20,
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 28,
+              interval: xInterval,
+              getTitlesWidget: (value, meta) {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    _formatX(value, timeMin),
+                    style: axisLabelStyle?.copyWith(fontSize: 10),
+                  ),
+                );
+              },
+            ),
           ),
         ),
         borderData: FlBorderData(
@@ -165,15 +232,17 @@ class HistoryChart extends StatelessWidget {
               return touchedSpots.map((spot) {
                 final index = spot.spotIndex;
                 final value = values[index];
+                final timeStr = _formatX(times[index] - timeMin, timeMin);
                 String suffix = '';
                 if (peaks.contains(index)) suffix = '  ↑ 峰值';
                 if (troughs.contains(index)) suffix = '  ↓ 谷值';
                 return LineTooltipItem(
-                  '${value.toStringAsFixed(2)}$unitLabel$suffix',
+                  '$timeStr\n${value.toStringAsFixed(2)}$unitLabel$suffix',
                   TextStyle(
                     color: color,
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
+                    height: 1.4,
                   ),
                 );
               }).toList();
@@ -184,7 +253,25 @@ class HistoryChart extends StatelessWidget {
     );
   }
 
-  /// Find indices of local peaks (strictly higher than both neighbors).
+  /// Choose a nice X tick interval (in ms) so we get 4-6 labels.
+  double _niceXInterval(double timeSpanMs) {
+    // For 24h: show ~6 ticks (every 4 hours = 14,400,000 ms)
+    // For 7d: show ~7 ticks (every 1 day = 86,400,000 ms)
+    // For 30d: show ~6 ticks (every 5 days = 432,000,000 ms)
+    if (timeSpanMs <= 0) return 1;
+
+    if (range == HistoryRange.day) {
+      // Target ~6 ticks → every 4 hours
+      if (timeSpanMs > 12 * 3600000) return 4 * 3600000; // 4h
+      return 2 * 3600000; // 2h
+    }
+    if (range == HistoryRange.week) {
+      return 86400000; // 1 day
+    }
+    // month
+    return 5 * 86400000; // 5 days
+  }
+
   List<int> _findPeaks(List<double> values) {
     if (values.length < 3) return [];
     final peaks = <int>[];
@@ -202,7 +289,6 @@ class HistoryChart extends StatelessWidget {
     return peaks;
   }
 
-  /// Find indices of local troughs (strictly lower than both neighbors).
   List<int> _findTroughs(List<double> values) {
     if (values.length < 3) return [];
     final troughs = <int>[];
@@ -220,7 +306,6 @@ class HistoryChart extends StatelessWidget {
     return troughs;
   }
 
-  /// Adaptive Y-axis min with 10% padding below the lowest value.
   double _computeMin(List<double> values) {
     final mn = values.reduce((a, b) => a < b ? a : b);
     final mx = values.reduce((a, b) => a > b ? a : b);
@@ -229,7 +314,6 @@ class HistoryChart extends StatelessWidget {
     return (mn - padding);
   }
 
-  /// Adaptive Y-axis max with 10% padding above the highest value.
   double _computeMax(List<double> values) {
     final mn = values.reduce((a, b) => a < b ? a : b);
     final mx = values.reduce((a, b) => a > b ? a : b);
@@ -238,11 +322,9 @@ class HistoryChart extends StatelessWidget {
     return (mx + padding);
   }
 
-  /// Compute a "nice" tick interval that produces readable Y-axis labels.
   double _niceInterval(double minY, double maxY) {
     final range = maxY - minY;
     if (range <= 0) return 1;
-    // Target ~5 ticks
     final raw = range / 5;
     final magnitude = _magnitude(raw);
     final normalized = raw / magnitude;
@@ -255,7 +337,6 @@ class HistoryChart extends StatelessWidget {
     return 10 * magnitude;
   }
 
-  /// Order of magnitude (e.g., 0.01 for 0.035, 1 for 5, 10 for 80).
   double _magnitude(double x) {
     return pow(10, (log(x) / ln10).floor()).toDouble();
   }
