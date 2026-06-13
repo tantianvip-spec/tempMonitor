@@ -72,6 +72,7 @@ class _DebugLogPageState extends State<DebugLogPage> {
           }
           return ListView.builder(
             reverse: true,
+            padding: EdgeInsets.zero,
             itemCount: state.entries.length,
             itemBuilder: (context, index) {
               final entry = state.entries[state.entries.length - 1 - index];
