@@ -205,24 +205,24 @@ class HistoryChart extends StatelessWidget {
               getDotPainter: (spot, percent, barData, index) {
                 if (peaks.contains(index)) {
                   return FlDotCirclePainter(
-                    radius: 5,
-                    strokeWidth: 2,
+                    radius: 6,
+                    strokeWidth: 3,
                     strokeColor: AppTheme.accentDanger,
                     color: AppTheme.bgPrimary(context),
                   );
                 }
                 if (troughs.contains(index)) {
                   return FlDotCirclePainter(
-                    radius: 5,
-                    strokeWidth: 2,
+                    radius: 6,
+                    strokeWidth: 3,
                     strokeColor: AppTheme.accentSuccess,
                     color: AppTheme.bgPrimary(context),
                   );
                 }
                 return FlDotCirclePainter(
-                  radius: 0,
-                  strokeWidth: 0,
-                  color: Colors.transparent,
+                  radius: 2,
+                  strokeWidth: 1,
+                  color: color,
                 );
               },
             ),
