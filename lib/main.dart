@@ -34,9 +34,14 @@ void main() async {
   // rebuilds. The debug assertion is a false positive here.
   Provider.debugCheckInvalidValueType = null;
 
-  // Initialize the background service first so it can start scanning
-  // in its own isolate before the UI is ready.
-  await BackgroundService.initialize();
+  // Initialize the background service so BLE scanning survives
+  // app suspension. Wrap in try-catch so a failure here doesn't
+  // prevent the app from starting.
+  try {
+    await BackgroundService.initialize();
+  } catch (e, s) {
+    DebugLogger().e('BackgroundService init failed: $e\n$s', tag: 'App');
+  }
 
   AppDatabase? database;
   try {
@@ -65,7 +70,7 @@ void main() async {
 
   // Auto-start scanning — starts the background service for periodic
   // BLE scanning and sets up the isolate port bridge.
-  scanService.start();
+  await scanService.start();
 
   DebugLogger().i('App initialized', tag: 'App');
 

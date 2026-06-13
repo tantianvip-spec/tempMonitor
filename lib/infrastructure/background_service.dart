@@ -22,6 +22,7 @@ import 'package:temp_monitor/services/settings_service.dart';
 /// isolate via [IsolateNameServer] under [AppConstants.uiIsolatePortName].
 class BackgroundService {
   static const int _notificationId = 888;
+  static bool _configured = false;
 
   /// Initialize the background service configuration.
   /// This must be called once during app startup (before [start]).
@@ -43,36 +44,28 @@ class BackgroundService {
         onBackground: onIosBackground,
       ),
     );
+    _configured = true;
   }
 
   /// Start the foreground service.
   static Future<void> start() async {
-    try {
-      final service = FlutterBackgroundService();
-      await service.startService();
-    } catch (_) {
-      // Not supported in test/desktop environments.
-    }
+    if (!_configured) return;
+    final service = FlutterBackgroundService();
+    await service.startService();
   }
 
   /// Stop the foreground service.
   static Future<void> stop() async {
-    try {
-      final service = FlutterBackgroundService();
-      service.invoke('stopService');
-    } catch (_) {
-      // Not supported in test/desktop environments.
-    }
+    if (!_configured) return;
+    final service = FlutterBackgroundService();
+    service.invoke('stopService');
   }
 
   /// Send updated settings to the running background service.
   static void updateSettings() {
-    try {
-      final service = FlutterBackgroundService();
-      service.invoke('updateSettings');
-    } catch (_) {
-      // Not supported in test/desktop environments.
-    }
+    if (!_configured) return;
+    final service = FlutterBackgroundService();
+    service.invoke('updateSettings');
   }
 
   @pragma('vm:entry-point')
@@ -84,26 +77,27 @@ class BackgroundService {
 
   @pragma('vm:entry-point')
   static void onStart(ServiceInstance service) async {
-    DartPluginRegistrant.ensureInitialized();
+    try {
+      DartPluginRegistrant.ensureInitialized();
 
-    // Ensure Android foreground service notification is shown.
-    if (service is AndroidServiceInstance) {
-      service.setForegroundNotificationInfo(
-        title: '温湿度监控',
-        content: '正在后台监听设备...',
-      );
-      await service.setAsForegroundService();
-    }
+      // Ensure Android foreground service notification is shown.
+      if (service is AndroidServiceInstance) {
+        service.setForegroundNotificationInfo(
+          title: '温湿度监控',
+          content: '正在后台监听设备...',
+        );
+        await service.setAsForegroundService();
+      }
 
-    final settings = SettingsService();
-    await settings.initialize();
+      final settings = SettingsService();
+      await settings.initialize();
 
-    final db = AppDatabase();
-    final repository = SensorRepository(db);
-    final scanner = BleScanner();
-    final mockSensor = MockSensor();
-    final notifications = NotificationService();
-    await notifications.initialize();
+      final db = AppDatabase();
+      final repository = SensorRepository(db);
+      final scanner = BleScanner();
+      final mockSensor = MockSensor();
+      final notifications = NotificationService();
+      await notifications.initialize();
 
     ThresholdEngine createEngine() => ThresholdEngine(
           tempMin: settings.getTempMin(),
@@ -196,5 +190,11 @@ class BackgroundService {
     });
 
     startScanning();
+    } catch (e, s) {
+      DebugLogger().e(
+        'BackgroundService onStart error: $e\n$s',
+        tag: 'BackgroundService',
+      );
+    }
   }
 }

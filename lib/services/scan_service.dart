@@ -49,7 +49,7 @@ class ScanService {
   /// Start scanning. Idempotent.
   /// Starts the background service for periodic scanning and sets up the
   /// isolate port bridge to receive readings from the background isolate.
-  void start() {
+  Future<void> start() async {
     DebugLogger().i('ScanService.start() — starting background service',
         tag: 'ScanService');
 
@@ -64,7 +64,7 @@ class ScanService {
     });
 
     // Start the background service for periodic BLE scanning.
-    BackgroundService.start();
+    await BackgroundService.start();
   }
 
   /// Restart scanning with latest settings.
