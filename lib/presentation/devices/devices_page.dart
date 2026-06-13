@@ -97,8 +97,8 @@ class _DevicesPageState extends State<DevicesPage> {
         centerTitle: true,
         actions: [
           if (_isScanning)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
+            const Padding(
+              padding: EdgeInsets.only(right: 8),
               child: SizedBox(
                 width: 18,
                 height: 18,
@@ -181,7 +181,7 @@ class _DevicesPageState extends State<DevicesPage> {
                       const _SectionHeader(title: '附近的蓝牙设备'),
                       const Spacer(),
                       if (_isScanning)
-                        SizedBox(
+                        const SizedBox(
                           width: 14,
                           height: 14,
                           child: CircularProgressIndicator(
@@ -311,7 +311,7 @@ class _NearbyDeviceTile extends StatelessWidget {
         style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
       ),
       trailing: device.isBThomeCompatible
-          ? Icon(Icons.add_circle_outline,
+          ? const Icon(Icons.add_circle_outline,
               color: AppTheme.accentSuccess, size: 22)
           : null,
     );
