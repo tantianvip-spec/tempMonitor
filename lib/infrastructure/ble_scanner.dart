@@ -140,10 +140,12 @@ class BleScanner {
               'BThome $deviceId: ${reading.temperature}°C ${reading.humidity}%',
               tag: 'BleScanner');
         } on BThomeParseException catch (e) {
+          // Partial BLE advertisement (e.g. battery-only, temp-only) is
+          // normal — the next broadcast will likely carry a full packet.
           final last = _lastParseError[deviceId];
           if (last == null || now.difference(last) > _parseErrorDebounce) {
             _lastParseError[deviceId] = now;
-            DebugLogger().w('Failed to parse $deviceId: $e', tag: 'BleScanner');
+            DebugLogger().d('Partial BThome packet from $deviceId: $e', tag: 'BleScanner');
           }
         }
       }
