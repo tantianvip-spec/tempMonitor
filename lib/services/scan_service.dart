@@ -11,11 +11,9 @@ import 'package:temp_monitor/services/settings_service.dart';
 
 /// Runs the scan loop (real BLE or mock) inside the **main isolate**.
 ///
-/// Readings are persisted to [repository] and forwarded to [readingStream]
-/// for any consumer (e.g. DashboardCubit) to subscribe to.
-///
-/// This avoids the crash-prone multi-isolate architecture of
-/// flutter_background_service while keeping the same data flow.
+/// Tracks the current mode so redundant [restart] calls are no-ops.
+/// BLE scanning only runs when explicitly started; the mock sensor
+/// stream replaces it when mock mode is enabled.
 class ScanService {
   final SensorRepository _repository;
   final SettingsService _settings;
@@ -29,6 +27,8 @@ class ScanService {
   StreamSubscription<Reading>? _mockSubscription;
   ThresholdEngine _thresholdEngine;
   bool _started = false;
+  bool _currentMockMode = false;
+  int _currentIntervalSec = 0;
 
   /// Broadcast stream that any consumer (DashboardCubit, etc.) can listen to.
   Stream<Reading> get readingStream => _controller.stream;
@@ -52,16 +52,35 @@ class ScanService {
         humidityMax: settings.getHumidityMax(),
       );
 
-  /// Start scanning. Safe to call multiple times — will cancel any
-  /// existing scan and restart with current settings.
+  /// Start scanning. Idempotent — safe to call many times.
   void start() {
-    _started = true;
     _thresholdEngine = _createEngine(_settings);
+    final mockMode = _settings.getMockDeviceEnabled();
+    final intervalSec = _settings.getScanIntervalSeconds();
+
+    DebugLogger().d(
+      'ScanService.start() called — mock=$mockMode interval=${intervalSec}s '
+      'started=$_started prevMock=$_currentMockMode prevInterval=$_currentIntervalSec\n'
+      'Stack: ${StackTrace.current}',
+      tag: 'ScanService',
+    );
+
+    // Skip if already running with same mode and interval.
+    if (_started &&
+        mockMode == _currentMockMode &&
+        intervalSec == _currentIntervalSec) {
+      DebugLogger().d('ScanService.start() — skip, no change', tag: 'ScanService');
+      return;
+    }
+
+    _currentMockMode = mockMode;
+    _currentIntervalSec = intervalSec;
     _cancelAll();
+    _started = true;
 
-    final interval = Duration(seconds: _settings.getScanIntervalSeconds());
+    final interval = Duration(seconds: intervalSec);
 
-    if (_settings.getMockDeviceEnabled()) {
+    if (mockMode) {
       DebugLogger().i('Starting mock sensor stream', tag: 'ScanService');
       _mockSubscription = _mockSensor
           .readings(deviceId: 'mock-device', interval: interval)
@@ -71,6 +90,20 @@ class ScanService {
 
     DebugLogger().i('Starting BLE scanner', tag: 'ScanService');
     _scanTimer = Timer.periodic(interval, (_) async {
+      // Re-check mock mode on each tick in case it was toggled
+      // between BLE scan cycles.
+      if (_settings.getMockDeviceEnabled()) {
+        _currentMockMode = true;
+        _scanTimer?.cancel();
+        _scanTimer = null;
+        DebugLogger().i(
+            'Switching from BLE to mock mid-tick', tag: 'ScanService');
+        _mockSubscription = _mockSensor
+            .readings(deviceId: 'mock-device', interval: interval)
+            .listen(_handleReading);
+        return;
+      }
+
       try {
         await for (final reading
             in _scanner.scan(timeout: const Duration(seconds: 2))) {
@@ -82,7 +115,7 @@ class ScanService {
     });
   }
 
-  /// Restart scanning with latest settings.
+  /// Restart scanning with latest settings. Idempotent.
   void restart() => start();
 
   /// Stop all scanning and clean up.
@@ -94,15 +127,12 @@ class ScanService {
   bool get isRunning => _started;
 
   void _handleReading(Reading reading) {
-    // Persist to database so watchAllDevices() fires.
     _repository.saveReading(reading).catchError((e) {
       DebugLogger().e('Failed to persist reading: $e', tag: 'ScanService');
     });
 
-    // Forward to any consumer (DashboardCubit, etc.).
     _controller.add(reading);
 
-    // Evaluate thresholds and fire notification if breached.
     final state = _thresholdEngine.evaluate(
       temperature: reading.temperature,
       humidity: reading.humidity,
