@@ -42,7 +42,10 @@ class ScanService {
         _scanner = BleScanner(),
         _mockSensor = MockSensor(),
         _notifications = notifications,
-        _thresholdEngine = _createEngine(settings);
+        _thresholdEngine = _createEngine(settings) {
+    // Wire the BLE scanner callback to our handler.
+    _scanner.onReading = _handleReading;
+  }
 
   static ThresholdEngine _createEngine(SettingsService settings) =>
       ThresholdEngine(
@@ -105,10 +108,7 @@ class ScanService {
       }
 
       try {
-        await for (final reading
-            in _scanner.scan(timeout: const Duration(seconds: 2))) {
-          _handleReading(reading);
-        }
+        await _scanner.scan(timeout: const Duration(seconds: 2));
       } catch (e) {
         DebugLogger().e('Scan error: $e', tag: 'ScanService');
       }

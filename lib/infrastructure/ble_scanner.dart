@@ -11,26 +11,25 @@ class BleScanner {
   static const _debounceDuration = Duration(seconds: 1);
   DateTime? _lastBluetoothOffLog;
   bool _initialized = false;
+  bool _scanning = false;
 
-  /// flutter_blue_plus lazily initializes its adapter state on first
-  /// access. Before that, [FlutterBluePlus.adapterStateNow] returns
-  /// [BluetoothAdapterState.unknown] even when Bluetooth is on.
-  /// Calling this method ensures the internal state is populated.
   Future<void> _ensureInitialized() async {
     if (_initialized) return;
     await FlutterBluePlus.adapterState.first;
     _initialized = true;
   }
 
-  Stream<Reading> scan({Duration? timeout}) async* {
+  /// Scan for BLE devices and notify [onReading] for each valid BThome
+  /// reading found. Runs for [timeout] duration then stops.
+  ///
+  /// Safe to call while a previous scan is still running — the old scan
+  /// is stopped first.
+  Future<void> scan({Duration? timeout}) async {
     if (!await FlutterBluePlus.isSupported) {
       DebugLogger().e('BLE not supported on this device', tag: 'BleScanner');
       return;
     }
 
-    // Ensure flutter_blue_plus has initialized its adapter state.
-    // On first call, adapterStateNow returns 'unknown' even when
-    // Bluetooth is on — we must await the first real state update.
     await _ensureInitialized();
 
     if (FlutterBluePlus.adapterStateNow != BluetoothAdapterState.on) {
@@ -39,31 +38,57 @@ class BleScanner {
           now.difference(_lastBluetoothOffLog!) > const Duration(seconds: 30)) {
         _lastBluetoothOffLog = now;
         DebugLogger().e(
-            'Bluetooth adapter is ${FlutterBluePlus.adapterStateNow.name} — '
-            'turn on Bluetooth or enable "模拟设备模式" in Settings',
+            'Bluetooth adapter is ${FlutterBluePlus.adapterStateNow.name}',
             tag: 'BleScanner');
       }
       return;
     }
 
-    await FlutterBluePlus.startScan(
-      withServices: [Guid(AppConstants.bthomeServiceUuid)],
-      timeout: timeout ?? const Duration(seconds: 15),
-    );
+    // Stop any previous scan first.
+    if (_scanning) {
+      try {
+        await FlutterBluePlus.stopScan();
+      } catch (_) {}
+    }
 
-    await for (final result in FlutterBluePlus.scanResults) {
-      for (final device in result) {
+    final scanTimeout = timeout ?? const Duration(seconds: 15);
+    _scanning = true;
+
+    try {
+      await FlutterBluePlus.startScan(
+        timeout: scanTimeout,
+      );
+
+      // Wait for the scan to complete (flutter_blue_plus auto-stops
+      // after the timeout, so just wait that long).
+      await Future.delayed(scanTimeout + const Duration(seconds: 1));
+    } finally {
+      _scanning = false;
+      try {
+        await FlutterBluePlus.stopScan();
+      } catch (_) {}
+
+      // Process whatever results came in during the scan window.
+      // flutter_blue_plus accumulates results in lastScanResults.
+      final results = FlutterBluePlus.lastScanResults;
+      for (final device in results) {
         final reading = _tryParseResult(device);
         if (reading != null) {
-          yield reading;
+          onReading?.call(reading);
         }
       }
     }
   }
 
   Future<void> stopScan() async {
-    await FlutterBluePlus.stopScan();
+    _scanning = false;
+    try {
+      await FlutterBluePlus.stopScan();
+    } catch (_) {}
   }
+
+  /// Called when a valid BThome reading is parsed. Set by ScanService.
+  void Function(Reading)? onReading;
 
   Reading? _tryParseResult(ScanResult result) {
     final deviceId = result.device.remoteId.str;
@@ -88,8 +113,8 @@ class BleScanner {
         rssi: result.rssi,
       );
       _lastSeen[deviceId] = now;
-      DebugLogger().d(
-          'Parsed $deviceId: ${reading.temperature}°C ${reading.humidity}%',
+      DebugLogger().i(
+          'Found BThome device $deviceId: ${reading.temperature}°C ${reading.humidity}%',
           tag: 'BleScanner');
       return reading;
     } on BThomeParseException catch (e) {
