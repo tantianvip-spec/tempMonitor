@@ -38,6 +38,10 @@ class ScanService {
   int _currentIntervalSec = 0;
   ReceivePort? _receivePort;
 
+  /// Tracks the last saved reading per device to avoid writing duplicates.
+  /// Keyed by deviceId; only updated when a new value is actually persisted.
+  final _lastSaved = <String, Reading>{};
+
   /// Broadcast stream that any consumer (DashboardCubit, etc.) can listen to.
   Stream<Reading> get readingStream => _controller.stream;
 
@@ -181,9 +185,19 @@ class ScanService {
   }
 
   void _handleReading(Reading reading) {
-    _repository.saveReading(reading).catchError((e) {
-      DebugLogger().e('Failed to persist reading: $e', tag: 'ScanService');
-    });
+    // Skip persisting when the value is identical to the last saved one.
+    // BLE sensors broadcast every ~200ms during a scan window — without
+    // dedup a single 10s window writes dozens of identical rows to the DB.
+    final prev = _lastSaved[reading.deviceId];
+    if (prev == null ||
+        prev.temperature != reading.temperature ||
+        prev.humidity != reading.humidity ||
+        prev.battery != reading.battery) {
+      _lastSaved[reading.deviceId] = reading;
+      _repository.saveReading(reading).catchError((e) {
+        DebugLogger().e('Failed to persist reading: $e', tag: 'ScanService');
+      });
+    }
 
     _controller.add(reading);
 

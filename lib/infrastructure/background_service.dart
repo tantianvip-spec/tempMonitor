@@ -139,12 +139,24 @@ class BackgroundService {
       // Look it up each tick so a UI hot-restart (which re-registers) is picked up.
       SendPort? uiPort;
 
+      // Tracks the last saved reading per device to avoid duplicates.
+      final lastSaved = <String, Reading>{};
+
       /// Process a single Reading: persist, push to UI, fire alert if breached.
       Future<void> handleReading(Reading reading) async {
-        try {
-          await repository.saveReading(reading);
-        } catch (e) {
-          DebugLogger().e('Background save error: $e', tag: 'BackgroundService');
+        // Dedup: only persist when a value actually changed.
+        final prev = lastSaved[reading.deviceId];
+        if (prev == null ||
+            prev.temperature != reading.temperature ||
+            prev.humidity != reading.humidity ||
+            prev.battery != reading.battery) {
+          lastSaved[reading.deviceId] = reading;
+          try {
+            await repository.saveReading(reading);
+          } catch (e) {
+            DebugLogger()
+                .e('Background save error: $e', tag: 'BackgroundService');
+          }
         }
 
         uiPort ??=
