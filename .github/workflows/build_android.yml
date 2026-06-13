@@ -104,8 +104,7 @@ jobs:
         run: flutter test
 
       - name: Decode keystore
-        run: |
-          echo "${{ secrets.UPLOAD_KEYSTORE_B64 }}" | base64 -d > android/app/upload-keystore.jks
+        run: printf '%s' "${{ secrets.UPLOAD_KEYSTORE_B64 }}" | base64 -d > android/app/upload-keystore.jks
 
       - name: Create key.properties
         run: |
