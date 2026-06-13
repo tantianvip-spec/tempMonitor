@@ -287,9 +287,9 @@ class BleScanner {
       }
     }
 
-    // If this packet has no useful data (neither temp, humidity, nor
-    // battery), skip it.
-    if (temperature == null && humidity == null && battery == null) return;
+    // If this packet has no temperature or humidity data, skip it.
+    // Battery-only lifecycle packets are not useful readings.
+    if (temperature == null && humidity == null) return;
 
     // Validate physical bounds before emitting.
     if (temperature != null &&

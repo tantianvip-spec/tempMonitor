@@ -144,6 +144,15 @@ class BackgroundService {
 
       /// Process a single Reading: persist, push to UI, fire alert if breached.
       Future<void> handleReading(Reading reading) async {
+        // Skip readings that carry no temperature or humidity data (e.g.
+        // battery-only lifecycle packets from ATC sensors).
+        if (reading.temperature == null && reading.humidity == null) {
+          DebugLogger().v(
+              'Skip save (no temp/humidity) ${reading.deviceId}',
+              tag: 'BackgroundService');
+          return;
+        }
+
         // Dedup: only persist when a value actually changed.
         final prev = lastSaved[reading.deviceId];
         if (prev == null ||

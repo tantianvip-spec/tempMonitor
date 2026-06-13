@@ -185,6 +185,17 @@ class ScanService {
   }
 
   void _handleReading(Reading reading) {
+    // Skip readings that carry no temperature or humidity data (e.g.
+    // battery-only lifecycle packets from ATC sensors). Don't update
+    // _lastSaved either, so a subsequent real reading won't be seen as
+    // "unchanged" against a null-metric reading.
+    if (reading.temperature == null && reading.humidity == null) {
+      DebugLogger().v(
+          'Skip save (no temp/humidity) ${reading.deviceId}',
+          tag: 'ScanService');
+      return;
+    }
+
     // Skip persisting when the value is identical to the last saved one.
     // BLE sensors broadcast every ~200ms during a scan window — without
     // dedup a single 10s window writes dozens of identical rows to the DB.
