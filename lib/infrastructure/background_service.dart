@@ -171,9 +171,7 @@ class BackgroundService {
       DebugLogger().i('Background BLE scanning started', tag: 'BackgroundService');
       scanTimer = Timer.periodic(interval, (_) async {
         try {
-          await scanner.scan(timeout: const Duration(seconds: 4));
-          // BleScanner calls onReading for each valid BThome reading.
-          // Wire that to our handler.
+          await scanner.scan(timeout: const Duration(seconds: 15));
         } catch (e) {
           DebugLogger().e('Background scan error: $e', tag: 'BackgroundService');
         }

@@ -87,7 +87,7 @@ class ScanService {
     DebugLogger().i('ScanService.scanNow() — immediate BLE scan',
         tag: 'ScanService');
     try {
-      await _scanner.scan(timeout: const Duration(seconds: 4));
+      await _scanner.scan(timeout: const Duration(seconds: 10));
     } catch (e) {
       DebugLogger().e('scanNow error: $e', tag: 'ScanService');
     }
