@@ -254,11 +254,15 @@ class _ScanDrawer extends StatelessWidget {
                   label: Text(isScanning ? '停止扫描' : '开始扫描'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: isScanning
-                        ? AppTheme.accentDanger.withOpacity(0.2)
-                        : AppTheme.accentTemp.withOpacity(0.2),
-                    foregroundColor: isScanning
                         ? AppTheme.accentDanger
-                        : AppTheme.accentTemp,
+                        : Theme.of(context).brightness == Brightness.dark
+                            ? AppTheme.accentTemp.withOpacity(0.2)
+                            : AppTheme.accentTemp,
+                    foregroundColor: isScanning
+                        ? Colors.white
+                        : Theme.of(context).brightness == Brightness.dark
+                            ? AppTheme.accentTemp
+                            : Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
