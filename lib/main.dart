@@ -34,6 +34,12 @@ void main() async {
   // rebuilds. The debug assertion is a false positive here.
   Provider.debugCheckInvalidValueType = null;
 
+  // Pre-create the foreground service notification channel before
+  // initializing the background service. On Android 12+, the channel
+  // must exist before startForeground() is called or the app crashes
+  // with CannotPostForegroundServiceNotificationException.
+  await BackgroundService.ensureNotificationChannel();
+
   // Initialize background service (best-effort — failure won't crash app).
   try {
     await BackgroundService.initialize();

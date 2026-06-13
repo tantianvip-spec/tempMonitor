@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:temp_monitor/core/constants.dart';
 import 'package:temp_monitor/data/app_database.dart' hide Reading;
 import 'package:temp_monitor/domain/models/reading.dart';
@@ -22,12 +23,55 @@ import 'package:temp_monitor/services/settings_service.dart';
 /// isolate via [IsolateNameServer] under [AppConstants.uiIsolatePortName].
 class BackgroundService {
   static const int _notificationId = 888;
+
+  /// Channel ID used by the foreground service notification. Must match
+  /// [AndroidConfiguration.notificationChannelId].
+  static const String _notificationChannelId = 'temp_monitor_service';
+
   static bool _configured = false;
+  static bool _channelCreated = false;
 
   /// Whether the background service was successfully configured and is
   /// available for use. Check before calling [start] if you need a
   /// fallback path.
   static bool get isAvailable => _configured;
+
+  /// Pre-create the foreground service notification channel.
+  ///
+  /// Android 12+ requires the channel to exist **before** [startForeground]
+  /// is called, otherwise the OS throws
+  /// [CannotPostForegroundServiceNotificationException] and the app crashes.
+  /// The `flutter_background_service` plugin creates this channel in its
+  /// Java `onCreate()`, but the timing is unreliable on some devices.
+  ///
+  /// Call this from the main isolate during app startup, **before**
+  /// [initialize]. Idempotent.
+  static Future<void> ensureNotificationChannel() async {
+    if (_channelCreated) return;
+    try {
+      final plugin = FlutterLocalNotificationsPlugin();
+      await plugin.initialize(const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      ));
+      final androidImpl = plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      if (androidImpl != null) {
+        const channel = AndroidNotificationChannel(
+          _notificationChannelId,
+          '温湿度监控服务',
+          description: '后台蓝牙扫描服务通知',
+          importance: Importance.low,
+        );
+        await androidImpl.createNotificationChannel(channel);
+      }
+      _channelCreated = true;
+      DebugLogger().i('Foreground service notification channel created',
+          tag: 'BackgroundService');
+    } catch (e) {
+      DebugLogger().e('Failed to create notification channel: $e',
+          tag: 'BackgroundService');
+    }
+  }
 
   /// Initialize the background service configuration.
   /// This must be called once during app startup (before [start]).
@@ -39,7 +83,7 @@ class BackgroundService {
         onStart: onStart,
         autoStart: false,
         isForegroundMode: true,
-        notificationChannelId: 'temp_monitor_service',
+        notificationChannelId: _notificationChannelId,
         initialNotificationTitle: '温湿度监控',
         initialNotificationContent: '正在后台监听设备...',
         foregroundServiceNotificationId: _notificationId,
