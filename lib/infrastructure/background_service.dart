@@ -157,6 +157,10 @@ class BackgroundService {
             DebugLogger()
                 .e('Background save error: $e', tag: 'BackgroundService');
           }
+        } else {
+          DebugLogger().v(
+              'Skip save (unchanged) ${reading.deviceId}: ${reading.temperature.toStringAsFixed(1)}°C ${reading.humidity.toStringAsFixed(1)}%',
+              tag: 'BackgroundService');
         }
 
         uiPort ??=

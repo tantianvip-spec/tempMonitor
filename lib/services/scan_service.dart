@@ -197,6 +197,10 @@ class ScanService {
       _repository.saveReading(reading).catchError((e) {
         DebugLogger().e('Failed to persist reading: $e', tag: 'ScanService');
       });
+    } else {
+      DebugLogger().v(
+          'Skip save (unchanged) ${reading.deviceId}: ${reading.temperature.toStringAsFixed(1)}°C ${reading.humidity.toStringAsFixed(1)}%',
+          tag: 'ScanService');
     }
 
     _controller.add(reading);

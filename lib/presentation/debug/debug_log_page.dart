@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -5,8 +7,32 @@ import 'package:temp_monitor/core/theme.dart';
 import 'package:temp_monitor/infrastructure/debug_logger.dart';
 import 'package:temp_monitor/presentation/debug/debug_log_cubit.dart';
 
-class DebugLogPage extends StatelessWidget {
+class DebugLogPage extends StatefulWidget {
   const DebugLogPage({super.key});
+
+  @override
+  State<DebugLogPage> createState() => _DebugLogPageState();
+}
+
+class _DebugLogPageState extends State<DebugLogPage> {
+  Timer? _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-refresh the log display every 2 seconds.
+    _refreshTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (mounted) {
+        context.read<DebugLogCubit>().refresh();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,12 +79,6 @@ class DebugLogPage extends StatelessWidget {
             },
           );
         },
-      ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppTheme.bgTertiary(context),
-        foregroundColor: AppTheme.textPrimary(context),
-        onPressed: () => context.read<DebugLogCubit>().refresh(),
-        child: const Icon(Icons.refresh),
       ),
     );
   }
