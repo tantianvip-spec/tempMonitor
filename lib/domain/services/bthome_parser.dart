@@ -10,12 +10,52 @@ class BThomeParseException implements Exception {
 }
 
 class BThomeParser {
+  // ── Known object IDs ──────────────────────────────────────────
   static const int _objectIdPacketId = 0x00;
   static const int _objectIdBattery = 0x01;
   static const int _objectIdTemperature = 0x02;
   static const int _objectIdHumidity = 0x03;
   static const int _objectIdTemperatureHigh = 0x2A;
   static const int _objectIdHumidityHigh = 0x2B;
+
+  /// BThome v2 object data lengths for IDs 0x00–0x3F.
+  /// IDs outside this range either use the next byte as length (≥0x80)
+  /// or are reserved. A value of 0 means unknown.
+  static const _lengthTable = <int, int>{
+    0x00: 1, // packet_id
+    0x01: 1, // battery
+    0x02: 2, // temperature (sint16)
+    0x03: 2, // humidity (uint16)
+    0x04: 3, // pressure
+    0x05: 3, // illuminance
+    0x06: 2, // mass
+    0x07: 1, // count
+    0x08: 3, // energy
+    0x09: 1, // power
+    0x0A: 2, // voltage
+    0x0B: 2, // pm2.5
+    0x0C: 3, // illuminance (uint24)
+    0x0D: 2, // pm10
+    0x0E: 2, // co2
+    0x0F: 2, // tvoc
+    0x10: 1, // moisture
+    0x11: 2, // acceleration_x
+    0x12: 2, // acceleration_y
+    0x13: 2, // acceleration_z
+    0x14: 2, // rotation_x
+    0x15: 2, // rotation_y
+    0x16: 2, // rotation_z
+    0x17: 2, // distance
+    0x18: 2, // gyro_x
+    0x19: 2, // gyro_y
+    0x1A: 2, // gyro_z
+    0x2A: 2, // temperature (high res, sint16)
+    0x2B: 2, // humidity (high res, uint16)
+    0x2C: 3, // pressure (high res)
+    0x2D: 3, // illuminance (high res)
+    0x2E: 2, // co2 (high res)
+    0x2F: 2, // tvoc (high res)
+  };
 
   // Physical sanity bounds — anything outside these is treated as a
   // garbled / wrong-firmware packet and rejected so it never reaches
@@ -24,6 +64,25 @@ class BThomeParser {
   static const double _maxTemp = 80.0;
   static const double _minHumidity = 0.0;
   static const double _maxHumidity = 100.0;
+
+  /// Returns the data length (in bytes) for [objectId], or `null` if
+  /// the ID is unknown and we can't determine the length.
+  static int? _objectDataLength(int objectId, List<int> bytes, int offset) {
+    if (objectId < 0x40) {
+      // 0x00–0x3F: fixed length from table.
+      final len = _lengthTable[objectId];
+      if (len != null) return len;
+      // Unknown ID in this range — no way to know length.
+      return null;
+    }
+    if (objectId < 0x80) {
+      // 0x40–0x7F: no data (flag bytes).
+      return 0;
+    }
+    // 0x80–0xFF: next byte is the data length.
+    if (offset >= bytes.length) return null;
+    return bytes[offset];
+  }
 
   static Reading parse(
     List<int> bytes, {
@@ -75,6 +134,9 @@ class BThomeParser {
           final raw = byteData.getInt16(offset, Endian.little);
           temperature = raw * 0.01;
           offset += 2;
+          // Early exit if we already have both — don't re-parse
+          // trailing junk as known IDs.
+          if (humidity != null) break _parseLoop;
         case _objectIdHumidity:
         case _objectIdHumidityHigh:
           if (offset + 1 >= bytes.length) {
@@ -84,15 +146,24 @@ class BThomeParser {
           humidity = raw * 0.01;
           offset += 2;
         default:
-          // Unknown object ID — we can't know its data length, so we
-          // can't skip it safely. If we already have both temperature
-          // and humidity, just stop parsing (trailing vendor data).
-          if (temperature != null && humidity != null) {
-            break _parseLoop;
+          // BThome v2: IDs 0x40–0x7F are 0-length (flags), IDs ≥0x80
+          // are variable-length (next byte is length). For known IDs
+          // in 0x00–0x3F we look up the length table; for anything else
+          // we read the length from the next byte.
+          final dataLen = _objectDataLength(objectId, bytes, offset);
+          if (dataLen == null) {
+            throw BThomeParseException(
+                'Unknown object id: 0x${objectId.toRadixString(16)}');
           }
-          throw BThomeParseException(
-              'Unknown object id: 0x${objectId.toRadixString(16)}');
+          // For variable-length IDs (≥0x80), the length byte itself
+          // sits at bytes[offset] and is 1 byte; skip it too.
+          offset += dataLen;
+          if (objectId >= 0x80) offset += 1;
       }
+
+      // If we already have both temp and humidity, stop — remaining
+      // bytes are vendor-specific data we don't understand.
+      if (temperature != null && humidity != null) break _parseLoop;
     }
 
     if (temperature == null || humidity == null) {

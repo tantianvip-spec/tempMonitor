@@ -113,5 +113,24 @@ void main() {
       expect(result.temperature, closeTo(25.00, 0.01));
       expect(result.humidity, closeTo(60.00, 0.01));
     });
+
+    test('parses with illuminance (0x0C) before temp and humidity', () {
+      // Device A4:C1:38:3F:B9:8D emits: header, packet_id, temp,
+      // humidity, then illuminance (0x0C, 3 bytes). The illuminance
+      // field must be correctly skipped.
+      final bytes = [
+        0x40,
+        0x00, 0x01, // packet_id = 1
+        0x02, 0xC4, 0x09, // temp 25.00
+        0x03, 0x70, 0x17, // humidity 60.00
+        0x0C, 0x00, 0x00, 0x01, // illuminance 1 lx
+      ];
+
+      final result =
+          BThomeParser.parse(bytes, deviceId: deviceId, rssi: rssi);
+
+      expect(result.temperature, closeTo(25.00, 0.01));
+      expect(result.humidity, closeTo(60.00, 0.01));
+    });
   });
 }
