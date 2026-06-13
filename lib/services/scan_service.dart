@@ -132,7 +132,7 @@ class ScanService {
       }
 
       try {
-        await _scanner.scan(timeout: const Duration(seconds: 10));
+        await _scanner.scan(timeout: _scanWindowFor(_currentIntervalSec));
       } catch (e) {
         DebugLogger().e('Scan error: $e', tag: 'ScanService');
       }
@@ -167,6 +167,18 @@ class ScanService {
   }
 
   bool get isRunning => _started;
+
+  /// Compute a sensible scan window for a given interval.
+  ///
+  /// The window should be long enough to collect a complete BThome reading
+  /// from sensors that split temp/humidity across separate advertisements
+  /// (~3s is enough), but never exceed the interval so the timer doesn't
+  /// overlap itself. Capped at 10 seconds to avoid excessive battery drain
+  /// on very long intervals.
+  static Duration _scanWindowFor(int intervalSec) {
+    final window = (intervalSec * 1000 ~/ 2).clamp(3000, 10000);
+    return Duration(milliseconds: window);
+  }
 
   void _handleReading(Reading reading) {
     _repository.saveReading(reading).catchError((e) {

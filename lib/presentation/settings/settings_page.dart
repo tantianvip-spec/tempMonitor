@@ -26,9 +26,11 @@ class SettingsPage extends StatelessWidget {
                   value: state.scanIntervalSeconds,
                   underline: const SizedBox(),
                   items: const [
-                    DropdownMenuItem(value: 1, child: Text('1 秒（高耗电）')),
-                    DropdownMenuItem(value: 2, child: Text('2 秒')),
-                    DropdownMenuItem(value: 5, child: Text('5 秒（默认）')),
+                    DropdownMenuItem(value: 5, child: Text('5 秒')),
+                    DropdownMenuItem(value: 30, child: Text('30 秒')),
+                    DropdownMenuItem(value: 60, child: Text('1 分钟')),
+                    DropdownMenuItem(value: 300, child: Text('5 分钟（推荐）')),
+                    DropdownMenuItem(value: 600, child: Text('10 分钟')),
                   ],
                   onChanged: (value) {
                     if (value != null) {

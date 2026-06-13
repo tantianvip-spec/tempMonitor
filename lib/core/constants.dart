@@ -1,6 +1,6 @@
 abstract class AppConstants {
   static const String bthomeServiceUuid = '0000fcd2-0000-1000-8000-00805f9b34fb';
-  static const int defaultScanIntervalSeconds = 5;
+  static const int defaultScanIntervalSeconds = 300;
   static const int defaultRetentionDays = 30;
   static const double defaultTempMin = 0.0;
   static const double defaultTempMax = 40.0;

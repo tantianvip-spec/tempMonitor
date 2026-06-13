@@ -73,7 +73,7 @@ class SettingsState extends Equatable {
   final ThemeMode themeMode;
 
   const SettingsState({
-    this.scanIntervalSeconds = 5,
+    this.scanIntervalSeconds = 300,
     this.retentionDays = 30,
     this.tempMin = 0,
     this.tempMax = 40,

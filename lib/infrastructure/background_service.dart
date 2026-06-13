@@ -204,7 +204,8 @@ class BackgroundService {
             tag: 'BackgroundService');
         scanTimer = Timer.periodic(interval, (_) async {
           try {
-            await scanner.scan(timeout: const Duration(seconds: 15));
+            final window = (interval.inMilliseconds ~/ 2).clamp(3000, 10000);
+            await scanner.scan(timeout: Duration(milliseconds: window));
           } catch (e) {
             DebugLogger()
                 .e('Background scan error: $e', tag: 'BackgroundService');
