@@ -95,5 +95,23 @@ void main() {
       expect(result.temperature, closeTo(25.00, 0.01));
       expect(result.humidity, closeTo(60.00, 0.01));
     });
+
+    test('ignores trailing unknown bytes after temp and humidity', () {
+      // Some devices append vendor-specific data after the standard
+      // BThome fields. If we already have temp + humidity, unknown
+      // trailing object IDs should be tolerated.
+      final bytes = [
+        0x40,
+        0x02, 0xC4, 0x09, // temp 25.00
+        0x03, 0x70, 0x17, // humidity 60.00
+        0xFF, 0x01, 0x02, 0x03, // unknown vendor data
+      ];
+
+      final result =
+          BThomeParser.parse(bytes, deviceId: deviceId, rssi: rssi);
+
+      expect(result.temperature, closeTo(25.00, 0.01));
+      expect(result.humidity, closeTo(60.00, 0.01));
+    });
   });
 }

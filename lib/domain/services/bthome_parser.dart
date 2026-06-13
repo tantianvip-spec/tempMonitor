@@ -45,9 +45,10 @@ class BThomeParser {
     double? humidity;
     int? battery;
 
-    var offset = 1;
     final byteData = Uint8List.fromList(bytes).buffer.asByteData();
+    var offset = 1;
 
+    _parseLoop:
     while (offset < bytes.length) {
       final objectId = bytes[offset];
       offset++;
@@ -83,10 +84,14 @@ class BThomeParser {
           humidity = raw * 0.01;
           offset += 2;
         default:
-          // Unknown object ID — skip the byte and continue looking for
-          // known fields. Some BThome-like devices broadcast extra data
-          // alongside standard temperature/humidity.
-          continue;
+          // Unknown object ID — we can't know its data length, so we
+          // can't skip it safely. If we already have both temperature
+          // and humidity, just stop parsing (trailing vendor data).
+          if (temperature != null && humidity != null) {
+            break _parseLoop;
+          }
+          throw BThomeParseException(
+              'Unknown object id: 0x${objectId.toRadixString(16)}');
       }
     }
 
