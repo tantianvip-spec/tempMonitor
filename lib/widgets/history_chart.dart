@@ -132,8 +132,14 @@ class HistoryChart extends StatelessWidget {
     final firstYTick = (minY / yInterval).ceil() * yInterval;
     final lastYTick = (maxY / yInterval).floor() * yInterval;
 
+    // Add small X padding so the first/last spots and X labels don't sit
+    // flush against the chart edge, preventing overflow clipping.
+    final xPad = timeSpan > 0 ? timeSpan * 0.02 : 1.0;
+
     return LineChart(
       LineChartData(
+        minX: 0 - xPad,
+        maxX: timeSpan + xPad,
         minY: minY,
         maxY: maxY,
         clipData: const FlClipData.all(),
@@ -157,7 +163,10 @@ class HistoryChart extends StatelessWidget {
             sideTitles: SideTitles(showTitles: false),
           ),
           rightTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
+            sideTitles: SideTitles(
+              showTitles: false,
+              reservedSize: 8, // prevent rightmost X label overflow
+            ),
           ),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
@@ -180,7 +189,7 @@ class HistoryChart extends StatelessWidget {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 20,
+              reservedSize: 24,
               interval: xInterval,
               getTitlesWidget: (value, meta) {
                 return Text(
