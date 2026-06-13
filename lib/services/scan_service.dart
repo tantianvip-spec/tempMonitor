@@ -12,8 +12,8 @@ import 'package:temp_monitor/services/settings_service.dart';
 /// Runs the scan loop (real BLE or mock) inside the **main isolate**.
 ///
 /// Tracks the current mode so redundant [restart] calls are no-ops.
-/// BLE scanning only runs when explicitly started; the mock sensor
-/// stream replaces it when mock mode is enabled.
+/// Exposes [nearbyDevices] for real-time display of discovered BLE
+/// devices during scanning.
 class ScanService {
   final SensorRepository _repository;
   final SettingsService _settings;
@@ -32,6 +32,10 @@ class ScanService {
 
   /// Broadcast stream that any consumer (DashboardCubit, etc.) can listen to.
   Stream<Reading> get readingStream => _controller.stream;
+
+  /// Real-time stream of BLE scan results (nearby devices + BThome readings).
+  /// Emitted after each scan window when not in mock mode.
+  Stream<ScanResultBundle> get nearbyDevices => _scanner.scanResults;
 
   ScanService({
     required SensorRepository repository,
@@ -117,6 +121,26 @@ class ScanService {
 
   /// Restart scanning with latest settings. Idempotent.
   void restart() => start();
+
+  /// Force restart even if settings haven't changed.
+  /// This is used when the user explicitly taps "re-scan".
+  void forceRestart() {
+    _currentMockMode = !_settings.getMockDeviceEnabled(); // force mismatch
+    _currentIntervalSec = -1;
+    start();
+  }
+
+  /// Trigger an immediate BLE scan and emit results to [nearbyDevices].
+  /// This is called when the user taps the refresh button on the devices page.
+  Future<void> scanNow() async {
+    if (_settings.getMockDeviceEnabled()) return;
+    DebugLogger().i('ScanService.scanNow() — immediate BLE scan', tag: 'ScanService');
+    try {
+      await _scanner.scan(timeout: const Duration(seconds: 4));
+    } catch (e) {
+      DebugLogger().e('scanNow error: $e', tag: 'ScanService');
+    }
+  }
 
   /// Stop all scanning and clean up.
   void stop() {

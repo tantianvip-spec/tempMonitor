@@ -2,9 +2,22 @@ import 'dart:async';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:temp_monitor/core/constants.dart';
+import 'package:temp_monitor/domain/models/nearby_device.dart';
 import 'package:temp_monitor/domain/models/reading.dart';
 import 'package:temp_monitor/domain/services/bthome_parser.dart';
 import 'package:temp_monitor/infrastructure/debug_logger.dart';
+
+/// Result of a single BLE scan tick — all nearby devices + any new
+/// BThome readings parsed from the scan window.
+class ScanResultBundle {
+  final List<NearbyDevice> nearbyDevices;
+  final List<Reading> bthomeReadings;
+
+  const ScanResultBundle({
+    required this.nearbyDevices,
+    required this.bthomeReadings,
+  });
+}
 
 class BleScanner {
   final _lastSeen = <String, DateTime>{};
@@ -13,17 +26,31 @@ class BleScanner {
   bool _initialized = false;
   bool _scanning = false;
 
+  /// Stream of scan results emitted after each scan window.
+  final _scanResultsController =
+      StreamController<ScanResultBundle>.broadcast();
+  Stream<ScanResultBundle> get scanResults => _scanResultsController.stream;
+
   Future<void> _ensureInitialized() async {
-    if (_initialized) return;
-    await FlutterBluePlus.adapterState.first;
+    if (_initialized) {
+      // Re-check: if adapter is off (not unknown), re-init to pick up
+      // state changes.
+      if (FlutterBluePlus.adapterStateNow != BluetoothAdapterState.unknown &&
+          FlutterBluePlus.adapterStateNow == BluetoothAdapterState.off) {
+        _initialized = false;
+      } else {
+        return;
+      }
+    }
+    // Wait for the adapter state stream to emit a definitive state
+    // (not 'unknown').
+    await FlutterBluePlus.adapterState
+        .firstWhere((s) => s != BluetoothAdapterState.unknown);
     _initialized = true;
   }
 
-  /// Scan for BLE devices and notify [onReading] for each valid BThome
-  /// reading found. Runs for [timeout] duration then stops.
-  ///
-  /// Safe to call while a previous scan is still running — the old scan
-  /// is stopped first.
+  /// Run one scan window of [duration]. Emits [ScanResultBundle] to
+  /// [scanResults] when done.
   Future<void> scan({Duration? timeout}) async {
     if (!await FlutterBluePlus.isSupported) {
       DebugLogger().e('BLE not supported on this device', tag: 'BleScanner');
@@ -51,7 +78,7 @@ class BleScanner {
       } catch (_) {}
     }
 
-    final scanTimeout = timeout ?? const Duration(seconds: 15);
+    final scanTimeout = timeout ?? const Duration(seconds: 4);
     _scanning = true;
 
     try {
@@ -59,24 +86,71 @@ class BleScanner {
         timeout: scanTimeout,
       );
 
-      // Wait for the scan to complete (flutter_blue_plus auto-stops
-      // after the timeout, so just wait that long).
       await Future.delayed(scanTimeout + const Duration(seconds: 1));
     } finally {
       _scanning = false;
       try {
         await FlutterBluePlus.stopScan();
       } catch (_) {}
+    }
 
-      // Process whatever results came in during the scan window.
-      // flutter_blue_plus accumulates results in lastScanResults.
-      final results = FlutterBluePlus.lastScanResults;
-      for (final device in results) {
-        final reading = _tryParseResult(device);
-        if (reading != null) {
-          onReading?.call(reading);
+    // Process accumulated results.
+    final results = FlutterBluePlus.lastScanResults;
+    final now = DateTime.now();
+    final nearbyDevices = <NearbyDevice>[];
+    final bthomeReadings = <Reading>[];
+
+    for (final result in results) {
+      final deviceId = result.device.remoteId.str;
+      final rssi = result.rssi;
+
+      // Check if this device has BThome service data.
+      final serviceData = result.advertisementData.serviceData;
+      final guid = Guid(AppConstants.bthomeServiceUuid);
+      final bytes = serviceData[guid];
+      final isBThome = bytes != null && bytes.isNotEmpty;
+
+      nearbyDevices.add(NearbyDevice(
+        deviceId: deviceId,
+        name: result.device.advName.isNotEmpty
+            ? result.device.advName
+            : null,
+        rssi: rssi,
+        isBThomeCompatible: isBThome,
+        lastSeen: now,
+      ));
+
+      // Parse BThome data if present.
+      if (isBThome) {
+        final lastSeen = _lastSeen[deviceId];
+        if (lastSeen != null && now.difference(lastSeen) < _debounceDuration) {
+          continue;
+        }
+        try {
+          final reading = BThomeParser.parse(
+            bytes,
+            deviceId: deviceId,
+            rssi: rssi,
+          );
+          _lastSeen[deviceId] = now;
+          bthomeReadings.add(reading);
+          DebugLogger().i(
+              'BThome $deviceId: ${reading.temperature}°C ${reading.humidity}%',
+              tag: 'BleScanner');
+        } on BThomeParseException catch (e) {
+          DebugLogger().w('Failed to parse $deviceId: $e', tag: 'BleScanner');
         }
       }
+    }
+
+    _scanResultsController.add(ScanResultBundle(
+      nearbyDevices: nearbyDevices,
+      bthomeReadings: bthomeReadings,
+    ));
+
+    // Forward BThome readings to the handler set by ScanService.
+    for (final reading in bthomeReadings) {
+      onReading?.call(reading);
     }
   }
 
@@ -90,36 +164,7 @@ class BleScanner {
   /// Called when a valid BThome reading is parsed. Set by ScanService.
   void Function(Reading)? onReading;
 
-  Reading? _tryParseResult(ScanResult result) {
-    final deviceId = result.device.remoteId.str;
-    final now = DateTime.now();
-    final lastSeen = _lastSeen[deviceId];
-    if (lastSeen != null && now.difference(lastSeen) < _debounceDuration) {
-      return null;
-    }
-
-    final serviceData = result.advertisementData.serviceData;
-    final guid = Guid(AppConstants.bthomeServiceUuid);
-    final bytes = serviceData[guid];
-
-    if (bytes == null || bytes.isEmpty) {
-      return null;
-    }
-
-    try {
-      final reading = BThomeParser.parse(
-        bytes,
-        deviceId: deviceId,
-        rssi: result.rssi,
-      );
-      _lastSeen[deviceId] = now;
-      DebugLogger().i(
-          'Found BThome device $deviceId: ${reading.temperature}°C ${reading.humidity}%',
-          tag: 'BleScanner');
-      return reading;
-    } on BThomeParseException catch (e) {
-      DebugLogger().w('Failed to parse $deviceId: $e', tag: 'BleScanner');
-      return null;
-    }
+  void dispose() {
+    _scanResultsController.close();
   }
 }

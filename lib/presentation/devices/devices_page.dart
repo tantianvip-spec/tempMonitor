@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -5,9 +7,11 @@ import 'package:provider/provider.dart';
 import 'package:temp_monitor/core/extensions.dart';
 import 'package:temp_monitor/core/theme.dart';
 import 'package:temp_monitor/domain/models/device.dart';
+import 'package:temp_monitor/domain/models/nearby_device.dart';
 import 'package:temp_monitor/domain/models/reading.dart';
 import 'package:temp_monitor/infrastructure/debug_logger.dart';
 import 'package:temp_monitor/infrastructure/permission_service.dart';
+import 'package:temp_monitor/infrastructure/ble_scanner.dart';
 import 'package:temp_monitor/presentation/dashboard/dashboard_cubit.dart';
 import 'package:temp_monitor/presentation/dashboard/dashboard_page.dart';
 import 'package:temp_monitor/repositories/sensor_repository.dart';
@@ -22,17 +26,64 @@ class DevicesPage extends StatefulWidget {
 }
 
 class _DevicesPageState extends State<DevicesPage> {
+  StreamSubscription<ScanResultBundle>? _nearbySubscription;
+  List<NearbyDevice> _nearbyDevices = [];
+  bool _isScanning = false;
+  Timer? _clearTimer;
+
   @override
   void initState() {
     super.initState();
     _requestPermissions();
+    _listenToNearby();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Re-subscribe if needed after dependency change.
+    _listenToNearby();
+  }
+
+  void _listenToNearby() {
+    _nearbySubscription?.cancel();
+    try {
+      final scanService = context.read<ScanService>();
+      _nearbySubscription = scanService.nearbyDevices.listen((bundle) {
+        if (!mounted) return;
+        setState(() {
+          _nearbyDevices = bundle.nearbyDevices;
+          _isScanning = true;
+        });
+        // Reset the clear timer: auto-clear 10s after the LAST update.
+        _clearTimer?.cancel();
+        _clearTimer = Timer(const Duration(seconds: 10), () {
+          if (!mounted) return;
+          setState(() {
+            _nearbyDevices = [];
+            _isScanning = false;
+          });
+        });
+      });
+    } catch (_) {
+      // ScanService not available — likely in test context.
+    }
+  }
+
+  @override
+  void dispose() {
+    _nearbySubscription?.cancel();
+    _clearTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _requestPermissions() async {
     final bleGranted = await PermissionService.requestBlePermissions();
-    final notifGranted = await PermissionService.requestNotificationPermission();
+    final notifGranted =
+        await PermissionService.requestNotificationPermission();
     if (!bleGranted || !notifGranted) {
-      DebugLogger().w('Some runtime permissions were denied', tag: 'DevicesPage');
+      DebugLogger()
+          .w('Some runtime permissions were denied', tag: 'DevicesPage');
     }
   }
 
@@ -45,15 +96,29 @@ class _DevicesPageState extends State<DevicesPage> {
         title: const Text('设备列表'),
         centerTitle: true,
         actions: [
+          if (_isScanning)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppTheme.accentTemp,
+                ),
+              ),
+            ),
           IconButton(
-            icon: Icon(PhosphorIcons.bluetoothConnected()),
+            icon: const Icon(Icons.refresh),
             tooltip: '重新扫描',
             onPressed: () {
-              context.read<ScanService>().restart();
+              setState(() => _isScanning = true);
+              context.read<ScanService>().forceRestart();
+              context.read<ScanService>().scanNow();
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('已触发重新扫描'),
-                  duration: Duration(seconds: 3),
+                  content: Text('正在扫描附近的蓝牙设备…'),
+                  duration: Duration(seconds: 2),
                 ),
               );
             },
@@ -63,26 +128,88 @@ class _DevicesPageState extends State<DevicesPage> {
       body: StreamBuilder<List<Device>>(
         stream: repository.watchAllDevices(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting &&
-              !snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final devices = snapshot.data ?? const <Device>[];
-          if (devices.isEmpty) {
+          final savedDevices = snapshot.data ?? const <Device>[];
+
+          // Show empty state only if nothing at all.
+          if (savedDevices.isEmpty && _nearbyDevices.isEmpty) {
+            if (_isScanning) {
+              return const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: AppTheme.accentTemp),
+                    SizedBox(height: 16),
+                    Text(
+                      '正在扫描…',
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 16,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      '请确保蓝牙已开启且设备在附近',
+                      style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
+                    ),
+                  ],
+                ),
+              );
+            }
             return _EmptyState(scanService: context.read<ScanService>());
           }
-          return ListView.separated(
+
+          return ListView(
             padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: devices.length,
-            separatorBuilder: (_, __) =>
-                const Divider(height: 1, indent: 64, endIndent: 16),
-            itemBuilder: (context, index) {
-              final device = devices[index];
-              return _DeviceTile(
-                device: device,
-                onTap: () => _openDashboard(context, repository, device),
-              );
-            },
+            children: [
+              // Saved devices section
+              if (savedDevices.isNotEmpty) ...[
+                const _SectionHeader(title: '已配对的设备'),
+                ...savedDevices.map((device) => _DeviceTile(
+                      device: device,
+                      onTap: () =>
+                          _openDashboard(context, repository, device),
+                    )),
+              ],
+
+              // Nearby devices section
+              if (_nearbyDevices.isNotEmpty) ...[
+                Padding(
+                  padding:
+                      const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                  child: Row(
+                    children: [
+                      const _SectionHeader(title: '附近的蓝牙设备'),
+                      const Spacer(),
+                      if (_isScanning)
+                        SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppTheme.accentTemp,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                ..._nearbyDevices.map((device) => _NearbyDeviceTile(
+                      device: device,
+                      onTap: () {
+                        // For BThome-compatible devices, navigate to dashboard.
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              device.isBThomeCompatible
+                                  ? '正在连接 ${device.name ?? device.deviceId}…'
+                                  : '该设备不兼容 BThome 协议',
+                            ),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                    )),
+              ],
+            ],
           );
         },
       ),
@@ -94,15 +221,10 @@ class _DevicesPageState extends State<DevicesPage> {
     SensorRepository repository,
     Device device,
   ) {
-    // readingStream is an optional provider registered only when the
-    // background isolate is active. Use a try-get pattern so the
-    // devices page works even in test contexts that don't provide one.
     Stream<Reading>? readingStream;
     try {
       readingStream = Provider.of<Stream<Reading>>(context, listen: false);
-    } catch (_) {
-      // not registered — skip real-time wiring.
-    }
+    } catch (_) {}
 
     Navigator.push(
       context,
@@ -115,6 +237,83 @@ class _DevicesPageState extends State<DevicesPage> {
           child: DashboardPage(deviceId: device.id),
         ),
       ),
+    );
+  }
+}
+
+class _NearbyDeviceTile extends StatelessWidget {
+  final NearbyDevice device;
+  final VoidCallback onTap;
+
+  const _NearbyDeviceTile({required this.device, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      onTap: onTap,
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: device.isBThomeCompatible
+              ? AppTheme.accentSuccess.withOpacity(0.15)
+              : AppTheme.bgTertiary,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        alignment: Alignment.center,
+        child: Icon(
+          device.isBThomeCompatible
+              ? PhosphorIcons.thermometer()
+              : PhosphorIcons.bluetoothSlash(),
+          color: device.isBThomeCompatible
+              ? AppTheme.accentSuccess
+              : AppTheme.textMuted,
+          size: 22,
+        ),
+      ),
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              device.name ?? device.deviceId,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: device.isBThomeCompatible
+                  ? AppTheme.accentSuccess.withOpacity(0.2)
+                  : AppTheme.textMuted.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              device.isBThomeCompatible ? 'BThome' : '未知',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: device.isBThomeCompatible
+                    ? AppTheme.accentSuccess
+                    : AppTheme.textMuted,
+              ),
+            ),
+          ),
+        ],
+      ),
+      subtitle: Text(
+        '信号: ${device.rssi} dBm',
+        style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
+      ),
+      trailing: device.isBThomeCompatible
+          ? Icon(Icons.add_circle_outline,
+              color: AppTheme.accentSuccess, size: 22)
+          : null,
     );
   }
 }
@@ -236,6 +435,27 @@ class _EmptyState extends StatelessWidget {
               label: const Text('重新扫描'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  const _SectionHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: AppTheme.textMuted,
+          letterSpacing: 0.5,
         ),
       ),
     );

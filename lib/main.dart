@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:temp_monitor/app.dart';
 import 'package:temp_monitor/data/app_database.dart' hide Reading;
 import 'package:temp_monitor/infrastructure/debug_logger.dart';
+import 'package:temp_monitor/infrastructure/permission_service.dart';
 import 'package:temp_monitor/infrastructure/notification_service.dart';
 import 'package:temp_monitor/repositories/sensor_repository.dart';
 import 'package:temp_monitor/services/scan_service.dart';
@@ -53,11 +54,12 @@ void main() async {
     notifications: notifications,
   );
 
+  // Request BLE permissions before starting the scan loop.
+  // On Android 12+, BLUETOOTH_SCAN permission is required for
+  // flutter_blue_plus.startScan() to work.
+  await PermissionService.requestBlePermissions();
+
   // Auto-start scanning based on current settings (mock or BLE).
-  // This is safe because ScanService runs in the main isolate — no
-  // cross-process crashes. If Bluetooth is off and mock is disabled,
-  // the BLE scanner will gracefully log "Bluetooth not enabled" each
-  // tick; no crash.
   scanService.start();
 
   DebugLogger().i('App initialized', tag: 'App');
