@@ -328,10 +328,15 @@ class _ScanDrawer extends StatelessWidget {
                           device: device,
                           onTap: () {
                             if (device.isBThomeCompatible) {
+                              context.read<SensorRepository>().addDevice(
+                                    device.deviceId,
+                                    name: device.name,
+                                  );
+                              Navigator.of(context).pop(); // close drawer
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    '选中 ${device.name ?? device.deviceId}',
+                                    '已添加 ${device.name ?? device.deviceId}',
                                   ),
                                   duration: const Duration(seconds: 2),
                                 ),

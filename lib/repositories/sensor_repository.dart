@@ -76,6 +76,18 @@ class SensorRepository {
     );
   }
 
+  Future<void> addDevice(String deviceId, {String? name}) async {
+    await _db.devicesDao.upsertDevice(
+      DevicesCompanion(
+        id: Value(deviceId),
+        name: Value(name ?? deviceId),
+        createdAt: Value(DateTime.now().millisecondsSinceEpoch),
+        lastSeenAt: Value(DateTime.now().millisecondsSinceEpoch),
+      ),
+    );
+    DebugLogger().i('Added device: ${name ?? deviceId}', tag: 'Repository');
+  }
+
   Future<void> _cleanupOldData() async {
     const days = AppConstants.defaultRetentionDays;
     final cutoff = DateTime.now().subtract(const Duration(days: days));
