@@ -30,44 +30,12 @@ class _DevicesPageState extends State<DevicesPage> {
   List<NearbyDevice> _nearbyDevices = [];
   bool _isScanning = false;
   Timer? _clearTimer;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
     super.initState();
     _requestPermissions();
-    _listenToNearby();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Re-subscribe if needed after dependency change.
-    _listenToNearby();
-  }
-
-  void _listenToNearby() {
-    _nearbySubscription?.cancel();
-    try {
-      final scanService = context.read<ScanService>();
-      _nearbySubscription = scanService.nearbyDevices.listen((bundle) {
-        if (!mounted) return;
-        setState(() {
-          _nearbyDevices = bundle.nearbyDevices;
-          _isScanning = true;
-        });
-        // Reset the clear timer: auto-clear 10s after the LAST update.
-        _clearTimer?.cancel();
-        _clearTimer = Timer(const Duration(seconds: 10), () {
-          if (!mounted) return;
-          setState(() {
-            _nearbyDevices = [];
-            _isScanning = false;
-          });
-        });
-      });
-    } catch (_) {
-      // ScanService not available — likely in test context.
-    }
   }
 
   @override
@@ -87,128 +55,79 @@ class _DevicesPageState extends State<DevicesPage> {
     }
   }
 
+  void _startScan() {
+    setState(() => _isScanning = true);
+    context.read<ScanService>().forceRestart();
+    context.read<ScanService>().scanNow();
+
+    _nearbySubscription?.cancel();
+    _nearbySubscription = context.read<ScanService>().nearbyDevices.listen((bundle) {
+      if (!mounted) return;
+      setState(() => _nearbyDevices = bundle.nearbyDevices);
+      _clearTimer?.cancel();
+      _clearTimer = Timer(const Duration(seconds: 10), () {
+        if (!mounted) return;
+        setState(() {
+          _nearbyDevices = [];
+          _isScanning = false;
+        });
+      });
+    });
+  }
+
+  void _stopScan() {
+    _nearbySubscription?.cancel();
+    _nearbySubscription = null;
+    _clearTimer?.cancel();
+    _nearbyDevices = [];
+    _isScanning = false;
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final repository = context.read<SensorRepository>();
 
     return Scaffold(
+      key: _scaffoldKey,
       appBar: AppBar(
         title: const Text('设备列表'),
         centerTitle: true,
         actions: [
-          if (_isScanning)
-            const Padding(
-              padding: EdgeInsets.only(right: 8),
-              child: SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppTheme.accentTemp,
-                ),
-              ),
-            ),
           IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: '重新扫描',
-            onPressed: () {
-              setState(() => _isScanning = true);
-              context.read<ScanService>().forceRestart();
-              context.read<ScanService>().scanNow();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('正在扫描附近的蓝牙设备…'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
+            icon: Icon(PhosphorIcons.bluetoothSlash()),
+            tooltip: '扫描附近设备',
+            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
           ),
         ],
+      ),
+      drawer: _ScanDrawer(
+        isScanning: _isScanning,
+        nearbyDevices: _nearbyDevices,
+        onStartScan: _startScan,
+        onStopScan: _stopScan,
       ),
       body: StreamBuilder<List<Device>>(
         stream: repository.watchAllDevices(),
         builder: (context, snapshot) {
           final savedDevices = snapshot.data ?? const <Device>[];
 
-          // Show empty state only if nothing at all.
-          if (savedDevices.isEmpty && _nearbyDevices.isEmpty) {
-            if (_isScanning) {
-              return const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(color: AppTheme.accentTemp),
-                    SizedBox(height: 16),
-                    Text(
-                      '正在扫描…',
-                      style: TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 16,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      '请确保蓝牙已开启且设备在附近',
-                      style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
-                    ),
-                  ],
-                ),
-              );
-            }
-            return _EmptyState(scanService: context.read<ScanService>());
+          if (savedDevices.isEmpty) {
+            return _EmptyState(
+              scanService: context.read<ScanService>(),
+              onScanTap: () => _scaffoldKey.currentState?.openDrawer(),
+            );
           }
 
           return ListView(
             padding: const EdgeInsets.symmetric(vertical: 8),
             children: [
-              // Saved devices section
-              if (savedDevices.isNotEmpty) ...[
-                const _SectionHeader(title: '已配对的设备'),
-                ...savedDevices.map((device) => _DeviceTile(
-                      device: device,
-                      onTap: () =>
-                          _openDashboard(context, repository, device),
-                    )),
-              ],
-
-              // Nearby devices section
-              if (_nearbyDevices.isNotEmpty) ...[
-                Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                  child: Row(
-                    children: [
-                      const _SectionHeader(title: '附近的蓝牙设备'),
-                      const Spacer(),
-                      if (_isScanning)
-                        const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppTheme.accentTemp,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                ..._nearbyDevices.map((device) => _NearbyDeviceTile(
-                      device: device,
-                      onTap: () {
-                        // For BThome-compatible devices, navigate to dashboard.
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              device.isBThomeCompatible
-                                  ? '正在连接 ${device.name ?? device.deviceId}…'
-                                  : '该设备不兼容 BThome 协议',
-                            ),
-                            duration: const Duration(seconds: 2),
-                          ),
-                        );
-                      },
-                    )),
-              ],
+              const _SectionHeader(title: '已配对的设备'),
+              ...savedDevices.map((device) => _DeviceTile(
+                    device: device,
+                    onTap: () =>
+                        _openDashboard(context, repository, device),
+                  )),
             ],
           );
         },
@@ -241,6 +160,199 @@ class _DevicesPageState extends State<DevicesPage> {
   }
 }
 
+/// Drawer that shows nearby BLE devices after scanning.
+class _ScanDrawer extends StatelessWidget {
+  final bool isScanning;
+  final List<NearbyDevice> nearbyDevices;
+  final VoidCallback onStartScan;
+  final VoidCallback onStopScan;
+
+  const _ScanDrawer({
+    required this.isScanning,
+    required this.nearbyDevices,
+    required this.onStartScan,
+    required this.onStopScan,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Drawer(
+      width: 320,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+              decoration: const BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: AppTheme.border, width: 1),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    PhosphorIcons.bluetoothConnected(),
+                    color: isScanning
+                        ? AppTheme.accentTemp
+                        : AppTheme.textMuted,
+                    size: 28,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '蓝牙扫描',
+                          style: TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          isScanning ? '正在扫描…' : '点击按钮开始扫描',
+                          style: const TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (isScanning)
+                    const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.accentTemp,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // Scan button
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: isScanning ? onStopScan : onStartScan,
+                  icon: Icon(
+                    isScanning ? Icons.stop : Icons.refresh,
+                    size: 20,
+                  ),
+                  label: Text(isScanning ? '停止扫描' : '开始扫描'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isScanning
+                        ? AppTheme.accentDanger.withOpacity(0.2)
+                        : AppTheme.accentTemp.withOpacity(0.2),
+                    foregroundColor: isScanning
+                        ? AppTheme.accentDanger
+                        : AppTheme.accentTemp,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // Divider
+            if (nearbyDevices.isNotEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Divider(color: AppTheme.border, height: 1),
+              ),
+
+            // Nearby device list
+            if (nearbyDevices.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Text(
+                  '附近的设备 (${nearbyDevices.length})',
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+
+            Expanded(
+              child: nearbyDevices.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isScanning
+                                  ? PhosphorIcons.wifiSlash()
+                                  : PhosphorIcons.bluetoothSlash(),
+                              size: 48,
+                              color: AppTheme.textMuted,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              isScanning
+                                  ? '正在搜索蓝牙设备…'
+                                  : '未扫描到设备',
+                              style: const TextStyle(
+                                color: AppTheme.textMuted,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      itemCount: nearbyDevices.length,
+                      itemBuilder: (context, index) {
+                        final device = nearbyDevices[index];
+                        return _NearbyDeviceTile(
+                          device: device,
+                          onTap: () {
+                            if (device.isBThomeCompatible) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    '选中 ${device.name ?? device.deviceId}',
+                                  ),
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('该设备不兼容 BThome 协议'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            }
+                          },
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _NearbyDeviceTile extends StatelessWidget {
   final NearbyDevice device;
   final VoidCallback onTap;
@@ -251,14 +363,15 @@ class _NearbyDeviceTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       onTap: onTap,
+      dense: true,
       leading: Container(
-        width: 40,
-        height: 40,
+        width: 36,
+        height: 36,
         decoration: BoxDecoration(
           color: device.isBThomeCompatible
               ? AppTheme.accentSuccess.withOpacity(0.15)
               : AppTheme.bgTertiary,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(8),
         ),
         alignment: Alignment.center,
         child: Icon(
@@ -268,7 +381,7 @@ class _NearbyDeviceTile extends StatelessWidget {
           color: device.isBThomeCompatible
               ? AppTheme.accentSuccess
               : AppTheme.textMuted,
-          size: 22,
+          size: 18,
         ),
       ),
       title: Row(
@@ -280,23 +393,23 @@ class _NearbyDeviceTile extends StatelessWidget {
               style: const TextStyle(
                 color: AppTheme.textPrimary,
                 fontWeight: FontWeight.w600,
-                fontSize: 14,
+                fontSize: 13,
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
             decoration: BoxDecoration(
               color: device.isBThomeCompatible
                   ? AppTheme.accentSuccess.withOpacity(0.2)
                   : AppTheme.textMuted.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(3),
             ),
             child: Text(
               device.isBThomeCompatible ? 'BThome' : '未知',
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 9,
                 fontWeight: FontWeight.w600,
                 color: device.isBThomeCompatible
                     ? AppTheme.accentSuccess
@@ -308,11 +421,11 @@ class _NearbyDeviceTile extends StatelessWidget {
       ),
       subtitle: Text(
         '信号: ${device.rssi} dBm',
-        style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
+        style: const TextStyle(color: AppTheme.textMuted, fontSize: 11),
       ),
       trailing: device.isBThomeCompatible
           ? const Icon(Icons.add_circle_outline,
-              color: AppTheme.accentSuccess, size: 22)
+              color: AppTheme.accentSuccess, size: 18)
           : null,
     );
   }
@@ -384,8 +497,12 @@ class _DeviceTile extends StatelessWidget {
 
 class _EmptyState extends StatelessWidget {
   final ScanService scanService;
+  final VoidCallback onScanTap;
 
-  const _EmptyState({required this.scanService});
+  const _EmptyState({
+    required this.scanService,
+    required this.onScanTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -416,23 +533,22 @@ class _EmptyState extends StatelessWidget {
             Text(
               mockMode
                   ? '等待模拟数据生成中…\n如果长时间无数据，请检查"设置"页面'
-                  : '请确保设备在附近并已开启蓝牙\n或去"设置"中开启"模拟设备模式"',
+                  : '请添加蓝牙温湿度传感器',
               textAlign: TextAlign.center,
               style: const TextStyle(color: AppTheme.textMuted, fontSize: 13),
             ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () {
-                scanService.restart();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('已重新启动扫描'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('重新扫描'),
+            if (!mockMode) ...[
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: onScanTap,
+                icon: const Icon(Icons.bluetooth_searching, size: 18),
+                label: const Text('扫描附近设备'),
+              ),
+            ],
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => scanService.restart(),
+              child: const Text('重新启动扫描', style: TextStyle(color: AppTheme.textMuted)),
             ),
           ],
         ),
