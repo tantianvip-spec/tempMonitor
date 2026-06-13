@@ -10,6 +10,17 @@ class BleScanner {
   final _lastSeen = <String, DateTime>{};
   static const _debounceDuration = Duration(seconds: 1);
   DateTime? _lastBluetoothOffLog;
+  bool _initialized = false;
+
+  /// flutter_blue_plus lazily initializes its adapter state on first
+  /// access. Before that, [FlutterBluePlus.adapterStateNow] returns
+  /// [BluetoothAdapterState.unknown] even when Bluetooth is on.
+  /// Calling this method ensures the internal state is populated.
+  Future<void> _ensureInitialized() async {
+    if (_initialized) return;
+    await FlutterBluePlus.adapterState.first;
+    _initialized = true;
+  }
 
   Stream<Reading> scan({Duration? timeout}) async* {
     if (!await FlutterBluePlus.isSupported) {
@@ -17,12 +28,20 @@ class BleScanner {
       return;
     }
 
+    // Ensure flutter_blue_plus has initialized its adapter state.
+    // On first call, adapterStateNow returns 'unknown' even when
+    // Bluetooth is on — we must await the first real state update.
+    await _ensureInitialized();
+
     if (FlutterBluePlus.adapterStateNow != BluetoothAdapterState.on) {
       final now = DateTime.now();
       if (_lastBluetoothOffLog == null ||
           now.difference(_lastBluetoothOffLog!) > const Duration(seconds: 30)) {
         _lastBluetoothOffLog = now;
-        DebugLogger().e('Bluetooth is not enabled — turn on Bluetooth or enable "模拟设备模式" in Settings', tag: 'BleScanner');
+        DebugLogger().e(
+            'Bluetooth adapter is ${FlutterBluePlus.adapterStateNow.name} — '
+            'turn on Bluetooth or enable "模拟设备模式" in Settings',
+            tag: 'BleScanner');
       }
       return;
     }
