@@ -24,9 +24,15 @@ class BackgroundService {
   static const int _notificationId = 888;
   static bool _configured = false;
 
+  /// Whether the background service was successfully configured and is
+  /// available for use. Check before calling [start] if you need a
+  /// fallback path.
+  static bool get isAvailable => _configured;
+
   /// Initialize the background service configuration.
   /// This must be called once during app startup (before [start]).
   static Future<void> initialize() async {
+    if (_configured) return;
     final service = FlutterBackgroundService();
     await service.configure(
       androidConfiguration: AndroidConfiguration(
@@ -55,17 +61,21 @@ class BackgroundService {
   }
 
   /// Stop the foreground service.
-  static Future<void> stop() async {
+  static void stop() {
     if (!_configured) return;
-    final service = FlutterBackgroundService();
-    service.invoke('stopService');
+    try {
+      final service = FlutterBackgroundService();
+      service.invoke('stopService');
+    } catch (_) {}
   }
 
   /// Send updated settings to the running background service.
   static void updateSettings() {
     if (!_configured) return;
-    final service = FlutterBackgroundService();
-    service.invoke('updateSettings');
+    try {
+      final service = FlutterBackgroundService();
+      service.invoke('updateSettings');
+    } catch (_) {}
   }
 
   @pragma('vm:entry-point')
@@ -96,100 +106,124 @@ class BackgroundService {
       final repository = SensorRepository(db);
       final scanner = BleScanner();
       final mockSensor = MockSensor();
-      final notifications = NotificationService();
-      await notifications.initialize();
 
-    ThresholdEngine createEngine() => ThresholdEngine(
-          tempMin: settings.getTempMin(),
-          tempMax: settings.getTempMax(),
-          humidityMin: settings.getHumidityMin(),
-          humidityMax: settings.getHumidityMax(),
-        );
-
-    var thresholdEngine = createEngine();
-
-    // The UI isolate registers a ReceivePort under this name when it starts.
-    // Look it up each tick so a UI hot-restart (which re-registers) is picked up.
-    SendPort? uiPort;
-
-    /// Process a single Reading: persist, push to UI, fire alert if breached.
-    Future<void> handleReading(Reading reading) async {
-      await repository.saveReading(reading);
-
-      uiPort ??=
-          IsolateNameServer.lookupPortByName(AppConstants.uiIsolatePortName);
-      uiPort?.send(reading);
-
-      final state = thresholdEngine.evaluate(
-        temperature: reading.temperature,
-        humidity: reading.humidity,
-      );
-
-      if (state.justBecameBreached) {
-        await notifications.showAlert(
-          title: '温湿度告警',
-          body:
-              '温度 ${reading.temperature}°C / 湿度 ${reading.humidity}% 超出设定范围',
-        );
+      // Note: NotificationService uses flutter_local_notifications which
+      // requires the main isolate's platform channels. In the background
+      // isolate it may not work on all devices, so wrap in try-catch.
+      NotificationService? notifications;
+      try {
+        notifications = NotificationService();
+        await notifications.initialize();
+      } catch (e) {
+        DebugLogger().w('Background notifications unavailable: $e',
+            tag: 'BackgroundService');
       }
-    }
 
-    Timer? scanTimer;
-    StreamSubscription<Reading>? mockSubscription;
+      ThresholdEngine createEngine() => ThresholdEngine(
+            tempMin: settings.getTempMin(),
+            tempMax: settings.getTempMax(),
+            humidityMin: settings.getHumidityMin(),
+            humidityMax: settings.getHumidityMax(),
+          );
 
-    void cancelAll() {
-      scanTimer?.cancel();
-      scanTimer = null;
-      mockSubscription?.cancel();
-      mockSubscription = null;
-    }
+      var thresholdEngine = createEngine();
 
-    void startScanning() {
-      cancelAll();
-      final interval = Duration(seconds: settings.getScanIntervalSeconds());
+      // The UI isolate registers a ReceivePort under this name when it starts.
+      // Look it up each tick so a UI hot-restart (which re-registers) is picked up.
+      SendPort? uiPort;
 
-      if (settings.getMockDeviceEnabled()) {
-        DebugLogger().i('Background mock sensor started', tag: 'BackgroundService');
-        mockSubscription = mockSensor
-            .readings(deviceId: 'mock-device', interval: interval)
-            .listen((reading) async {
+      /// Process a single Reading: persist, push to UI, fire alert if breached.
+      Future<void> handleReading(Reading reading) async {
+        try {
+          await repository.saveReading(reading);
+        } catch (e) {
+          DebugLogger().e('Background save error: $e', tag: 'BackgroundService');
+        }
+
+        uiPort ??=
+            IsolateNameServer.lookupPortByName(AppConstants.uiIsolatePortName);
+        uiPort?.send(reading);
+
+        final state = thresholdEngine.evaluate(
+          temperature: reading.temperature,
+          humidity: reading.humidity,
+        );
+
+        if (state.justBecameBreached && notifications != null) {
           try {
-            await handleReading(reading);
+            await notifications.showAlert(
+              title: '温湿度告警',
+              body:
+                  '温度 ${reading.temperature}°C / 湿度 ${reading.humidity}% 超出设定范围',
+            );
           } catch (e) {
-            DebugLogger().e('Mock handler error: $e', tag: 'BackgroundService');
+            DebugLogger().e('Background notify error: $e',
+                tag: 'BackgroundService');
+          }
+        }
+      }
+
+      Timer? scanTimer;
+      StreamSubscription<Reading>? mockSubscription;
+
+      void cancelAll() {
+        scanTimer?.cancel();
+        scanTimer = null;
+        mockSubscription?.cancel();
+        mockSubscription = null;
+      }
+
+      void startScanning() {
+        cancelAll();
+        final interval = Duration(seconds: settings.getScanIntervalSeconds());
+
+        if (settings.getMockDeviceEnabled()) {
+          DebugLogger().i('Background mock sensor started',
+              tag: 'BackgroundService');
+          mockSubscription = mockSensor
+              .readings(deviceId: 'mock-device', interval: interval)
+              .listen((reading) async {
+            try {
+              await handleReading(reading);
+            } catch (e) {
+              DebugLogger()
+                  .e('Mock handler error: $e', tag: 'BackgroundService');
+            }
+          });
+          return;
+        }
+
+        DebugLogger().i('Background BLE scanning started',
+            tag: 'BackgroundService');
+        scanTimer = Timer.periodic(interval, (_) async {
+          try {
+            await scanner.scan(timeout: const Duration(seconds: 15));
+          } catch (e) {
+            DebugLogger()
+                .e('Background scan error: $e', tag: 'BackgroundService');
           }
         });
-        return;
       }
 
-      DebugLogger().i('Background BLE scanning started', tag: 'BackgroundService');
-      scanTimer = Timer.periodic(interval, (_) async {
-        try {
-          await scanner.scan(timeout: const Duration(seconds: 15));
-        } catch (e) {
-          DebugLogger().e('Background scan error: $e', tag: 'BackgroundService');
-        }
+      // Wire the scanner's reading callback.
+      scanner.onReading = (Reading reading) {
+        handleReading(reading).catchError((e) {
+          DebugLogger().e('Background handleReading error: $e',
+              tag: 'BackgroundService');
+        });
+      };
+
+      service.on('stopService').listen((event) {
+        cancelAll();
+        service.stopSelf();
       });
-    }
 
-    // Wire the scanner's reading callback.
-    scanner.onReading = (Reading reading) {
-      handleReading(reading).catchError((e) {
-        DebugLogger().e('Background handleReading error: $e', tag: 'BackgroundService');
+      service.on('updateSettings').listen((event) {
+        thresholdEngine = createEngine();
+        startScanning();
       });
-    };
 
-    service.on('stopService').listen((event) {
-      cancelAll();
-      service.stopSelf();
-    });
-
-    service.on('updateSettings').listen((event) {
-      thresholdEngine = createEngine();
       startScanning();
-    });
-
-    startScanning();
     } catch (e, s) {
       DebugLogger().e(
         'BackgroundService onStart error: $e\n$s',

@@ -4,56 +4,90 @@ import 'dart:ui';
 
 import 'package:temp_monitor/core/constants.dart';
 import 'package:temp_monitor/domain/models/reading.dart';
+import 'package:temp_monitor/domain/services/threshold_engine.dart';
 import 'package:temp_monitor/infrastructure/background_service.dart';
 import 'package:temp_monitor/infrastructure/ble_scanner.dart';
 import 'package:temp_monitor/infrastructure/debug_logger.dart';
+import 'package:temp_monitor/infrastructure/mock_sensor.dart';
+import 'package:temp_monitor/infrastructure/notification_service.dart';
 import 'package:temp_monitor/repositories/sensor_repository.dart';
 import 'package:temp_monitor/services/settings_service.dart';
 
-/// Coordinates scanning between the UI isolate and the background service.
+/// Coordinates scanning between the background service and main isolate.
 ///
-/// **Periodic BLE scanning** (for data collection) runs in the background
-/// service isolate via [BackgroundService], so it survives app suspension.
+/// Attempts to use [BackgroundService] for periodic scanning that survives
+/// app suspension. If the background service fails to start, falls back
+/// to a main-isolate [Timer.periodic] — scanning pauses when the app is
+/// backgrounded but the app never crashes.
 ///
-/// **On-demand scanning** (for the devices page — nearby device list) runs
-/// here in the main isolate via [BleScanner.scan].
-///
-/// Readings from the background isolate arrive via [IsolateNameServer] and
-/// are forwarded to [readingStream] for the DashboardCubit to consume.
+/// On-demand scanning (devices page) always runs in the main isolate.
 class ScanService {
   final SensorRepository _repository;
   final SettingsService _settings;
   final BleScanner _scanner;
+  final MockSensor _mockSensor;
+  final NotificationService _notifications;
   final StreamController<Reading> _controller =
       StreamController<Reading>.broadcast();
 
+  Timer? _scanTimer;
+  StreamSubscription<Reading>? _mockSubscription;
+  ThresholdEngine _thresholdEngine;
+  bool _started = false;
+  bool _currentMockMode = false;
+  int _currentIntervalSec = 0;
   ReceivePort? _receivePort;
 
   /// Broadcast stream that any consumer (DashboardCubit, etc.) can listen to.
   Stream<Reading> get readingStream => _controller.stream;
 
   /// Real-time stream of BLE scan results (nearby devices + BThome readings).
-  /// Emitted after each on-demand scan window.
   Stream<ScanResultBundle> get nearbyDevices => _scanner.scanResults;
 
   ScanService({
     required SensorRepository repository,
     required SettingsService settings,
+    required NotificationService notifications,
   })  : _repository = repository,
         _settings = settings,
-        _scanner = BleScanner() {
-    // Wire the BLE scanner callback for on-demand scan readings.
+        _scanner = BleScanner(),
+        _mockSensor = MockSensor(),
+        _notifications = notifications,
+        _thresholdEngine = _createEngine(settings) {
     _scanner.onReading = _handleReading;
   }
 
-  /// Start scanning. Idempotent.
-  /// Starts the background service for periodic scanning and sets up the
-  /// isolate port bridge to receive readings from the background isolate.
-  Future<void> start() async {
-    DebugLogger().i('ScanService.start() — starting background service',
-        tag: 'ScanService');
+  static ThresholdEngine _createEngine(SettingsService settings) =>
+      ThresholdEngine(
+        tempMin: settings.getTempMin(),
+        tempMax: settings.getTempMax(),
+        humidityMin: settings.getHumidityMin(),
+        humidityMax: settings.getHumidityMax(),
+      );
 
-    // Set up the ReceivePort to receive readings from the background isolate.
+  /// Start scanning. Idempotent.
+  ///
+  /// Always starts the main-isolate [Timer.periodic] for guaranteed data
+  /// collection. Also attempts to start the [BackgroundService] for data
+  /// collection when the app is suspended — if it fails, the main-isolate
+  /// timer continues uninterrupted.
+  void start() {
+    _thresholdEngine = _createEngine(_settings);
+    final mockMode = _settings.getMockDeviceEnabled();
+    final intervalSec = _settings.getScanIntervalSeconds();
+
+    if (_started &&
+        mockMode == _currentMockMode &&
+        intervalSec == _currentIntervalSec) {
+      return;
+    }
+
+    _currentMockMode = mockMode;
+    _currentIntervalSec = intervalSec;
+    _cancelAll();
+    _started = true;
+
+    // Set up the ReceivePort so the background isolate can send us readings.
     _receivePort = ReceivePort();
     IsolateNameServer.registerPortWithName(
         _receivePort!.sendPort, AppConstants.uiIsolatePortName);
@@ -63,50 +97,76 @@ class ScanService {
       }
     });
 
-    // Start the background service for periodic BLE scanning.
-    await BackgroundService.start();
+    // Try to start the background service (best-effort). It handles its
+    // own errors internally so this never throws. If it succeeds, readings
+    // will also arrive via the ReceivePort above.
+    BackgroundService.start();
+
+    // Always start the main-isolate timer. If the background service is
+    // also running, duplicate readings are harmless (BleScanner debounces
+    // them per instance, and each instance writes to the DB independently).
+    _startMainIsolateTimer();
   }
 
-  /// Restart scanning with latest settings.
-  void restart() {
-    try {
-      BackgroundService.updateSettings();
-    } catch (_) {
-      // May fail in test environment.
+  void _startMainIsolateTimer() {
+    final interval = Duration(seconds: _currentIntervalSec);
+
+    if (_currentMockMode) {
+      DebugLogger().i('Starting mock sensor stream', tag: 'ScanService');
+      _mockSubscription = _mockSensor
+          .readings(deviceId: 'mock-device', interval: interval)
+          .listen(_handleReading);
+      return;
     }
+
+    DebugLogger().i('Starting BLE scanner (main isolate)', tag: 'ScanService');
+    _scanTimer = Timer.periodic(interval, (_) async {
+      if (_settings.getMockDeviceEnabled()) {
+        _currentMockMode = true;
+        _scanTimer?.cancel();
+        _scanTimer = null;
+        _mockSubscription = _mockSensor
+            .readings(deviceId: 'mock-device', interval: interval)
+            .listen(_handleReading);
+        return;
+      }
+
+      try {
+        await _scanner.scan(timeout: const Duration(seconds: 10));
+      } catch (e) {
+        DebugLogger().e('Scan error: $e', tag: 'ScanService');
+      }
+    });
   }
 
-  /// Force restart — used when user explicitly taps "re-scan".
+  void restart() => start();
+
   void forceRestart() {
-    restart();
+    _currentMockMode = !_settings.getMockDeviceEnabled();
+    _currentIntervalSec = -1;
+    start();
   }
 
-  /// Trigger an immediate BLE scan for the devices page (nearby devices).
   Future<void> scanNow() async {
     if (_settings.getMockDeviceEnabled()) return;
     DebugLogger().i('ScanService.scanNow() — immediate BLE scan',
         tag: 'ScanService');
     try {
-      await _scanner.scan(timeout: const Duration(seconds: 10));
+      await _scanner.scan(timeout: const Duration(seconds: 4));
     } catch (e) {
       DebugLogger().e('scanNow error: $e', tag: 'ScanService');
     }
   }
 
-  /// Stop all scanning and clean up.
   void stop() {
-    try {
-      BackgroundService.stop();
-    } catch (_) {
-      // May fail in test environment where background service is not
-      // supported (e.g. Linux/desktop test runner).
-    }
+    _started = false;
+    _cancelAll();
     _receivePort?.close();
     _receivePort = null;
     IsolateNameServer.removePortNameMapping(AppConstants.uiIsolatePortName);
   }
 
-  bool get isRunning => true; // Background service manages its own lifecycle.
+  bool get isRunning => _started;
 
   void _handleReading(Reading reading) {
     _repository.saveReading(reading).catchError((e) {
@@ -114,9 +174,28 @@ class ScanService {
     });
 
     _controller.add(reading);
+
+    final state = _thresholdEngine.evaluate(
+      temperature: reading.temperature,
+      humidity: reading.humidity,
+    );
+
+    if (state.justBecameBreached) {
+      _notifications.showAlert(
+        title: '温湿度告警',
+        body:
+            '温度 ${reading.temperature}°C / 湿度 ${reading.humidity}% 超出设定范围',
+      );
+    }
   }
 
-  /// Dispose the service. No further readings will be processed.
+  void _cancelAll() {
+    _scanTimer?.cancel();
+    _scanTimer = null;
+    _mockSubscription?.cancel();
+    _mockSubscription = null;
+  }
+
   void dispose() {
     stop();
     _controller.close();

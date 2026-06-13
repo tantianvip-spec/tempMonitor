@@ -34,9 +34,7 @@ void main() async {
   // rebuilds. The debug assertion is a false positive here.
   Provider.debugCheckInvalidValueType = null;
 
-  // Initialize the background service so BLE scanning survives
-  // app suspension. Wrap in try-catch so a failure here doesn't
-  // prevent the app from starting.
+  // Initialize background service (best-effort — failure won't crash app).
   try {
     await BackgroundService.initialize();
   } catch (e, s) {
@@ -61,6 +59,7 @@ void main() async {
   final scanService = ScanService(
     repository: repository,
     settings: settings,
+    notifications: notifications,
   );
 
   // Request BLE permissions before starting the scan loop.
@@ -68,9 +67,9 @@ void main() async {
   // flutter_blue_plus.startScan() to work.
   await PermissionService.requestBlePermissions();
 
-  // Auto-start scanning — starts the background service for periodic
-  // BLE scanning and sets up the isolate port bridge.
-  await scanService.start();
+  // Auto-start scanning — tries background service first,
+  // falls back to main-isolate timer if unavailable.
+  scanService.start();
 
   DebugLogger().i('App initialized', tag: 'App');
 
