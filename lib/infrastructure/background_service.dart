@@ -159,7 +159,9 @@ class BackgroundService {
           }
         } else {
           DebugLogger().v(
-              'Skip save (unchanged) ${reading.deviceId}: ${reading.temperature.toStringAsFixed(1)}°C ${reading.humidity.toStringAsFixed(1)}%',
+              'Skip save (unchanged) ${reading.deviceId}: '
+              '${reading.temperature?.toStringAsFixed(1) ?? "?"}°C '
+              '${reading.humidity?.toStringAsFixed(1) ?? "?"}%',
               tag: 'BackgroundService');
         }
 
@@ -177,7 +179,8 @@ class BackgroundService {
             await notifications.showAlert(
               title: '温湿度告警',
               body:
-                  '温度 ${reading.temperature}°C / 湿度 ${reading.humidity}% 超出设定范围',
+                  '温度 ${reading.temperature?.toStringAsFixed(1) ?? "?"}°C / '
+                  '湿度 ${reading.humidity?.toStringAsFixed(1) ?? "?"}% 超出设定范围',
             );
           } catch (e) {
             DebugLogger().e('Background notify error: $e',

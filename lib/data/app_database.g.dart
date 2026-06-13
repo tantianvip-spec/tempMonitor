@@ -303,14 +303,14 @@ class $ReadingsTable extends Readings with TableInfo<$ReadingsTable, Reading> {
       const VerificationMeta('temperature');
   @override
   late final GeneratedColumn<double> temperature = GeneratedColumn<double>(
-      'temperature', aliasedName, false,
-      type: DriftSqlType.double, requiredDuringInsert: true);
+      'temperature', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
   static const VerificationMeta _humidityMeta =
       const VerificationMeta('humidity');
   @override
   late final GeneratedColumn<double> humidity = GeneratedColumn<double>(
-      'humidity', aliasedName, false,
-      type: DriftSqlType.double, requiredDuringInsert: true);
+      'humidity', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
   static const VerificationMeta _batteryMeta =
       const VerificationMeta('battery');
   @override
@@ -355,14 +355,10 @@ class $ReadingsTable extends Readings with TableInfo<$ReadingsTable, Reading> {
           _temperatureMeta,
           temperature.isAcceptableOrUnknown(
               data['temperature']!, _temperatureMeta));
-    } else if (isInserting) {
-      context.missing(_temperatureMeta);
     }
     if (data.containsKey('humidity')) {
       context.handle(_humidityMeta,
           humidity.isAcceptableOrUnknown(data['humidity']!, _humidityMeta));
-    } else if (isInserting) {
-      context.missing(_humidityMeta);
     }
     if (data.containsKey('battery')) {
       context.handle(_batteryMeta,
@@ -394,9 +390,9 @@ class $ReadingsTable extends Readings with TableInfo<$ReadingsTable, Reading> {
       deviceId: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}device_id'])!,
       temperature: attachedDatabase.typeMapping
-          .read(DriftSqlType.double, data['${effectivePrefix}temperature'])!,
+          .read(DriftSqlType.double, data['${effectivePrefix}temperature']),
       humidity: attachedDatabase.typeMapping
-          .read(DriftSqlType.double, data['${effectivePrefix}humidity'])!,
+          .read(DriftSqlType.double, data['${effectivePrefix}humidity']),
       battery: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}battery']),
       rssi: attachedDatabase.typeMapping
@@ -415,16 +411,16 @@ class $ReadingsTable extends Readings with TableInfo<$ReadingsTable, Reading> {
 class Reading extends DataClass implements Insertable<Reading> {
   final int id;
   final String deviceId;
-  final double temperature;
-  final double humidity;
+  final double? temperature;
+  final double? humidity;
   final int? battery;
   final int? rssi;
   final int recordedAt;
   const Reading(
       {required this.id,
       required this.deviceId,
-      required this.temperature,
-      required this.humidity,
+      this.temperature,
+      this.humidity,
       this.battery,
       this.rssi,
       required this.recordedAt});
@@ -433,8 +429,12 @@ class Reading extends DataClass implements Insertable<Reading> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['device_id'] = Variable<String>(deviceId);
-    map['temperature'] = Variable<double>(temperature);
-    map['humidity'] = Variable<double>(humidity);
+    if (!nullToAbsent || temperature != null) {
+      map['temperature'] = Variable<double>(temperature);
+    }
+    if (!nullToAbsent || humidity != null) {
+      map['humidity'] = Variable<double>(humidity);
+    }
     if (!nullToAbsent || battery != null) {
       map['battery'] = Variable<int>(battery);
     }
@@ -449,8 +449,12 @@ class Reading extends DataClass implements Insertable<Reading> {
     return ReadingsCompanion(
       id: Value(id),
       deviceId: Value(deviceId),
-      temperature: Value(temperature),
-      humidity: Value(humidity),
+      temperature: temperature == null && nullToAbsent
+          ? const Value.absent()
+          : Value(temperature),
+      humidity: humidity == null && nullToAbsent
+          ? const Value.absent()
+          : Value(humidity),
       battery: battery == null && nullToAbsent
           ? const Value.absent()
           : Value(battery),
@@ -465,8 +469,8 @@ class Reading extends DataClass implements Insertable<Reading> {
     return Reading(
       id: serializer.fromJson<int>(json['id']),
       deviceId: serializer.fromJson<String>(json['deviceId']),
-      temperature: serializer.fromJson<double>(json['temperature']),
-      humidity: serializer.fromJson<double>(json['humidity']),
+      temperature: serializer.fromJson<double?>(json['temperature']),
+      humidity: serializer.fromJson<double?>(json['humidity']),
       battery: serializer.fromJson<int?>(json['battery']),
       rssi: serializer.fromJson<int?>(json['rssi']),
       recordedAt: serializer.fromJson<int>(json['recordedAt']),
@@ -478,8 +482,8 @@ class Reading extends DataClass implements Insertable<Reading> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'deviceId': serializer.toJson<String>(deviceId),
-      'temperature': serializer.toJson<double>(temperature),
-      'humidity': serializer.toJson<double>(humidity),
+      'temperature': serializer.toJson<double?>(temperature),
+      'humidity': serializer.toJson<double?>(humidity),
       'battery': serializer.toJson<int?>(battery),
       'rssi': serializer.toJson<int?>(rssi),
       'recordedAt': serializer.toJson<int>(recordedAt),
@@ -489,16 +493,16 @@ class Reading extends DataClass implements Insertable<Reading> {
   Reading copyWith(
           {int? id,
           String? deviceId,
-          double? temperature,
-          double? humidity,
+          Value<double?> temperature = const Value.absent(),
+          Value<double?> humidity = const Value.absent(),
           Value<int?> battery = const Value.absent(),
           Value<int?> rssi = const Value.absent(),
           int? recordedAt}) =>
       Reading(
         id: id ?? this.id,
         deviceId: deviceId ?? this.deviceId,
-        temperature: temperature ?? this.temperature,
-        humidity: humidity ?? this.humidity,
+        temperature: temperature.present ? temperature.value : this.temperature,
+        humidity: humidity.present ? humidity.value : this.humidity,
         battery: battery.present ? battery.value : this.battery,
         rssi: rssi.present ? rssi.value : this.rssi,
         recordedAt: recordedAt ?? this.recordedAt,
@@ -550,8 +554,8 @@ class Reading extends DataClass implements Insertable<Reading> {
 class ReadingsCompanion extends UpdateCompanion<Reading> {
   final Value<int> id;
   final Value<String> deviceId;
-  final Value<double> temperature;
-  final Value<double> humidity;
+  final Value<double?> temperature;
+  final Value<double?> humidity;
   final Value<int?> battery;
   final Value<int?> rssi;
   final Value<int> recordedAt;
@@ -567,14 +571,12 @@ class ReadingsCompanion extends UpdateCompanion<Reading> {
   ReadingsCompanion.insert({
     this.id = const Value.absent(),
     required String deviceId,
-    required double temperature,
-    required double humidity,
+    this.temperature = const Value.absent(),
+    this.humidity = const Value.absent(),
     this.battery = const Value.absent(),
     this.rssi = const Value.absent(),
     required int recordedAt,
   })  : deviceId = Value(deviceId),
-        temperature = Value(temperature),
-        humidity = Value(humidity),
         recordedAt = Value(recordedAt);
   static Insertable<Reading> custom({
     Expression<int>? id,
@@ -599,8 +601,8 @@ class ReadingsCompanion extends UpdateCompanion<Reading> {
   ReadingsCompanion copyWith(
       {Value<int>? id,
       Value<String>? deviceId,
-      Value<double>? temperature,
-      Value<double>? humidity,
+      Value<double?>? temperature,
+      Value<double?>? humidity,
       Value<int?>? battery,
       Value<int?>? rssi,
       Value<int>? recordedAt}) {
@@ -1098,8 +1100,8 @@ typedef $$DevicesTableProcessedTableManager = ProcessedTableManager<
 typedef $$ReadingsTableCreateCompanionBuilder = ReadingsCompanion Function({
   Value<int> id,
   required String deviceId,
-  required double temperature,
-  required double humidity,
+  Value<double?> temperature,
+  Value<double?> humidity,
   Value<int?> battery,
   Value<int?> rssi,
   required int recordedAt,
@@ -1107,8 +1109,8 @@ typedef $$ReadingsTableCreateCompanionBuilder = ReadingsCompanion Function({
 typedef $$ReadingsTableUpdateCompanionBuilder = ReadingsCompanion Function({
   Value<int> id,
   Value<String> deviceId,
-  Value<double> temperature,
-  Value<double> humidity,
+  Value<double?> temperature,
+  Value<double?> humidity,
   Value<int?> battery,
   Value<int?> rssi,
   Value<int> recordedAt,
@@ -1301,8 +1303,8 @@ class $$ReadingsTableTableManager extends RootTableManager<
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
             Value<String> deviceId = const Value.absent(),
-            Value<double> temperature = const Value.absent(),
-            Value<double> humidity = const Value.absent(),
+            Value<double?> temperature = const Value.absent(),
+            Value<double?> humidity = const Value.absent(),
             Value<int?> battery = const Value.absent(),
             Value<int?> rssi = const Value.absent(),
             Value<int> recordedAt = const Value.absent(),
@@ -1319,8 +1321,8 @@ class $$ReadingsTableTableManager extends RootTableManager<
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
             required String deviceId,
-            required double temperature,
-            required double humidity,
+            Value<double?> temperature = const Value.absent(),
+            Value<double?> humidity = const Value.absent(),
             Value<int?> battery = const Value.absent(),
             Value<int?> rssi = const Value.absent(),
             required int recordedAt,

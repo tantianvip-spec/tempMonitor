@@ -36,11 +36,13 @@ class ThresholdEngine {
   });
 
   ThresholdState evaluate({
-    required double temperature,
-    required double humidity,
+    required double? temperature,
+    required double? humidity,
   }) {
-    final tempBreached = temperature < tempMin || temperature > tempMax;
-    final humidityBreached = humidity < humidityMin || humidity > humidityMax;
+    final tempBreached = temperature != null &&
+        (temperature < tempMin || temperature > tempMax);
+    final humidityBreached = humidity != null &&
+        (humidity < humidityMin || humidity > humidityMax);
     final currentlyBreached = tempBreached || humidityBreached;
 
     final justBecameBreached = !_wasBreached && currentlyBreached;

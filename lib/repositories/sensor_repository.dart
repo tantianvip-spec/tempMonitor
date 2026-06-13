@@ -36,17 +36,18 @@ class SensorRepository {
     await _db.readingsDao.insertReading(
       ReadingsCompanion(
         deviceId: Value(reading.deviceId),
-        temperature: Value(reading.temperature),
-        humidity: Value(reading.humidity),
-        battery: Value(reading.battery),
-        rssi: Value(reading.rssi),
+        temperature: Value<double?>(reading.temperature),
+        humidity: Value<double?>(reading.humidity),
+        battery: Value<int?>(reading.battery),
+        rssi: Value<int?>(reading.rssi),
         recordedAt: Value(reading.recordedAt.millisecondsSinceEpoch),
       ),
     );
 
     await _cleanupOldData();
     DebugLogger().i(
-      'Saved reading: ${reading.temperature}°C, ${reading.humidity}%',
+      'Saved reading: ${reading.temperature?.toStringAsFixed(1) ?? "?"}°C, '
+      '${reading.humidity?.toStringAsFixed(1) ?? "?"}%',
       tag: 'Repository',
     );
   }

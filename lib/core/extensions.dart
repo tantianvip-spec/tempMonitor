@@ -25,3 +25,8 @@ extension DoubleFormat on double {
   String toTempString() => '${toStringAsFixed(1)}°C';
   String toHumidityString() => '${toStringAsFixed(1)}%';
 }
+
+extension NullableDoubleFormat on double? {
+  String toTempString() => this == null ? '--°C' : this!.toTempString();
+  String toHumidityString() => this == null ? '--%' : this!.toHumidityString();
+}

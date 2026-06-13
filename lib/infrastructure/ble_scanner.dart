@@ -20,20 +20,6 @@ class ScanResultBundle {
   });
 }
 
-/// Accumulates partial BThome data across multiple advertisements
-/// within a single scan window.
-class _PartialReading {
-  double? temperature;
-  double? humidity;
-  int? battery;
-  int rssi;
-  DateTime lastSeen;
-
-  _PartialReading({required this.rssi, required this.lastSeen});
-
-  bool get isComplete => temperature != null && humidity != null;
-}
-
 class BleScanner {
   final _lastSeen = <String, DateTime>{};
   final _lastParseError = <String, DateTime>{};
@@ -43,9 +29,11 @@ class BleScanner {
   bool _initialized = false;
   bool _scanning = false;
 
-  /// Accumulator for partial BThome data across multiple advertisements
-  /// within a single scan window. Cleared after each scan.
-  final _partial = <String, _PartialReading>{};
+  // Physical sanity bounds — matches BThomeParser constants.
+  static const double _minTemp = -40.0;
+  static const double _maxTemp = 80.0;
+  static const double _minHumidity = 0.0;
+  static const double _maxHumidity = 100.0;
 
   /// Stream of scan results emitted after each scan window.
   final _scanResultsController =
@@ -97,9 +85,6 @@ class BleScanner {
 
     final scanTimeout = timeout ?? const Duration(seconds: 4);
     _scanning = true;
-
-    // Clear partial accumulators from any previous scan.
-    _partial.clear();
 
     // Real-time listener for nearby devices display and BThome accumulation.
     final nearbyDevices = <NearbyDevice>[];
@@ -196,7 +181,9 @@ class BleScanner {
       _lastSeen[deviceId] = now;
       bthomeReadings.add(reading);
       DebugLogger().i(
-          'BThome $deviceId: ${reading.temperature.toStringAsFixed(2)}°C ${reading.humidity.toStringAsFixed(2)}%',
+          'BThome $deviceId: '
+          '${reading.temperature?.toStringAsFixed(1) ?? "?"}°C '
+          '${reading.humidity?.toStringAsFixed(1) ?? "?"}%',
           tag: 'BleScanner');
     } on BThomeParseException catch (e) {
       final last = _lastParseError[deviceId];
@@ -208,12 +195,10 @@ class BleScanner {
     }
   }
 
-  /// Accumulate partial BThome data across multiple advertisements in the
-  /// same scan window. Many BThome sensors split temperature and humidity
-  /// across separate BLE advertisements to fit the 31-byte limit.
-  ///
-  /// When both temperature and humidity have been seen (across one or more
-  /// packets), a combined [Reading] is emitted to [bthomeReadings].
+  /// Accumulate BThome data from a scan result. Tries full parse first;
+  /// if it succeeds (even with partial temp/humidity), emit immediately.
+  /// Falls back to manual extraction for packets the parser rejects
+  /// (encrypted, unknown format, etc.).
   void _accumulateBThome(
     ScanResult result,
     DateTime now,
@@ -226,33 +211,34 @@ class BleScanner {
     if (bytes == null || bytes.isEmpty) return;
 
     // Try a full parse first — some sensors send everything in one packet.
+    // Now that the parser allows partial temp/humidity, this succeeds even
+    // for single-value packets like ATC_PVVX.
     try {
       final reading = BThomeParser.parse(
         bytes,
         deviceId: deviceId,
         rssi: result.rssi,
       );
-      // Full parse succeeded. Clear any partial data for this device and
-      // emit the complete reading.
-      _partial.remove(deviceId);
       bthomeReadings.add(reading);
       DebugLogger().i(
-          'BThome $deviceId: ${reading.temperature.toStringAsFixed(2)}°C '
-          '${reading.humidity.toStringAsFixed(2)}% (combined)',
+          'BThome $deviceId: '
+          '${reading.temperature?.toStringAsFixed(1) ?? "?"}°C '
+          '${reading.humidity?.toStringAsFixed(1) ?? "?"}%',
           tag: 'BleScanner');
       return;
     } on BThomeParseException {
-      // Expected — partial packet. Accumulate below.
+      // Fall through to manual extraction below.
     }
 
-    // Extract whatever we can from this partial packet and merge with
-    // any previously accumulated data.
+    // Manual fallback for packets the parser can't handle.
     _mergePartial(bytes, deviceId, result.rssi, now, bthomeReadings);
   }
 
   /// Extract temperature/humidity/battery from a partial BThome packet
-  /// and merge with previously accumulated data. Emits a complete reading
-  /// when both temperature and humidity are available.
+  /// and merge with previously accumulated data. Emits a partial reading
+  /// immediately whenever temperature or humidity is available — no need
+  /// to wait for both, because ATC_PVVX sensors split them across
+  /// separate advertisements.
   void _mergePartial(
     List<int> bytes,
     String deviceId,
@@ -301,35 +287,41 @@ class BleScanner {
       }
     }
 
-    // Merge with accumulator.
-    final partial = _partial.putIfAbsent(
-      deviceId,
-      () => _PartialReading(rssi: rssi, lastSeen: now),
-    );
+    // If this packet has no useful data (neither temp, humidity, nor
+    // battery), skip it.
+    if (temperature == null && humidity == null && battery == null) return;
 
-    if (temperature != null) partial.temperature = temperature;
-    if (humidity != null) partial.humidity = humidity;
-    if (battery != null) partial.battery = battery;
-    partial.rssi = rssi;
-    partial.lastSeen = now;
-
-    // Emit if complete.
-    if (partial.isComplete) {
-      final reading = Reading(
-        deviceId: deviceId,
-        temperature: partial.temperature!,
-        humidity: partial.humidity!,
-        battery: partial.battery,
-        rssi: partial.rssi,
-        recordedAt: now.toUtc(),
-      );
-      _partial.remove(deviceId);
-      bthomeReadings.add(reading);
-      DebugLogger().i(
-          'BThome $deviceId: ${reading.temperature.toStringAsFixed(2)}°C '
-          '${reading.humidity.toStringAsFixed(2)}% (accumulated)',
+    // Validate physical bounds before emitting.
+    if (temperature != null &&
+        (temperature < _minTemp || temperature > _maxTemp)) {
+      DebugLogger().d(
+          'Ignoring out-of-range temperature from $deviceId: $temperature',
           tag: 'BleScanner');
+      return;
     }
+    if (humidity != null &&
+        (humidity < _minHumidity || humidity > _maxHumidity)) {
+      DebugLogger().d(
+          'Ignoring out-of-range humidity from $deviceId: $humidity',
+          tag: 'BleScanner');
+      return;
+    }
+
+    // Emit immediately with whatever we have.
+    final reading = Reading(
+      deviceId: deviceId,
+      temperature: temperature,
+      humidity: humidity,
+      battery: battery,
+      rssi: rssi,
+      recordedAt: now.toUtc(),
+    );
+    bthomeReadings.add(reading);
+    DebugLogger().i(
+      'BThome $deviceId: ${temperature?.toStringAsFixed(1) ?? "?"}°C '
+      '${humidity?.toStringAsFixed(1) ?? "?"}% (partial)',
+      tag: 'BleScanner',
+    );
   }
 
   /// BThome v2 object data length lookup.

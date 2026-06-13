@@ -28,48 +28,63 @@ class HistoryChart extends StatelessWidget {
           fontSize: 10,
         );
 
-    final times =
-        readings.map((r) => r.recordedAt.millisecondsSinceEpoch.toDouble()).toList();
-    final timeMin = times.reduce((a, b) => a < b ? a : b);
-    final timeMax = times.reduce((a, b) => a > b ? a : b);
+    // Separate temperature and humidity readings — each chart shows only
+    // the points where that metric was present.
+    final tempReadings =
+        readings.where((r) => r.temperature != null).toList();
+    final humReadings =
+        readings.where((r) => r.humidity != null).toList();
+
+    final allTimes =
+        readings.map((r) => r.recordedAt.millisecondsSinceEpoch.toDouble());
+    final timeMin = allTimes.reduce((a, b) => a < b ? a : b);
+    final timeMax = allTimes.reduce((a, b) => a > b ? a : b);
     final timeSpan = timeMax - timeMin;
-    final temps = readings.map((r) => r.temperature).toList();
-    final hums = readings.map((r) => r.humidity).toList();
+    final temps = tempReadings.map((r) => r.temperature!).toList();
+    final hums = humReadings.map((r) => r.humidity!).toList();
+    final tempTimes = tempReadings
+        .map((r) => r.recordedAt.millisecondsSinceEpoch.toDouble())
+        .toList();
+    final humTimes = humReadings
+        .map((r) => r.recordedAt.millisecondsSinceEpoch.toDouble())
+        .toList();
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
       children: [
-        _ChartSection(
-          title: '温度',
-          icon: Icons.thermostat,
-          color: AppTheme.accentTemp,
-          currentValue: '${temps.last.toStringAsFixed(1)}°C',
-          chart: _buildChart(
-            context: context,
-            values: temps,
-            times: times,
-            timeMin: timeMin,
-            timeSpan: timeSpan,
+        if (temps.isNotEmpty)
+          _ChartSection(
+            title: '温度',
+            icon: Icons.thermostat,
             color: AppTheme.accentTemp,
-            axisLabelStyle: axisLabelStyle,
+            currentValue: '${temps.last.toStringAsFixed(1)}°C',
+            chart: _buildChart(
+              context: context,
+              values: temps,
+              times: tempTimes,
+              timeMin: timeMin,
+              timeSpan: timeSpan,
+              color: AppTheme.accentTemp,
+              axisLabelStyle: axisLabelStyle,
+            ),
           ),
-        ),
-        const SizedBox(height: 16),
-        _ChartSection(
-          title: '湿度',
-          icon: Icons.water_drop,
-          color: AppTheme.accentHumidity,
-          currentValue: '${hums.last.toStringAsFixed(1)}%',
-          chart: _buildChart(
-            context: context,
-            values: hums,
-            times: times,
-            timeMin: timeMin,
-            timeSpan: timeSpan,
+        if (temps.isNotEmpty && hums.isNotEmpty) const SizedBox(height: 16),
+        if (hums.isNotEmpty)
+          _ChartSection(
+            title: '湿度',
+            icon: Icons.water_drop,
             color: AppTheme.accentHumidity,
-            axisLabelStyle: axisLabelStyle,
+            currentValue: '${hums.last.toStringAsFixed(1)}%',
+            chart: _buildChart(
+              context: context,
+              values: hums,
+              times: humTimes,
+              timeMin: timeMin,
+              timeSpan: timeSpan,
+              color: AppTheme.accentHumidity,
+              axisLabelStyle: axisLabelStyle,
+            ),
           ),
-        ),
         const SizedBox(height: 16),
       ],
     );

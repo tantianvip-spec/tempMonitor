@@ -155,15 +155,20 @@ class BThomeParser {
       if (temperature != null && humidity != null) break _parseLoop;
     }
 
-    if (temperature == null || humidity == null) {
-      throw BThomeParseException('Missing temperature or humidity');
-    }
-
-    if (temperature < _minTemp || temperature > _maxTemp) {
+    // Validate individually: if temperature was received, check it's
+    // within physical bounds.
+    if (temperature != null &&
+        (temperature < _minTemp || temperature > _maxTemp)) {
       throw BThomeParseException('Temperature out of range: $temperature');
     }
-    if (humidity < _minHumidity || humidity > _maxHumidity) {
+    if (humidity != null &&
+        (humidity < _minHumidity || humidity > _maxHumidity)) {
       throw BThomeParseException('Humidity out of range: $humidity');
+    }
+
+    if (temperature == null && humidity == null) {
+      throw BThomeParseException(
+          'No temperature or humidity data in packet');
     }
 
     return Reading(
