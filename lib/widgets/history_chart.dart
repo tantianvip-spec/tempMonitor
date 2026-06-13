@@ -25,23 +25,25 @@ class HistoryChart extends StatelessWidget {
 
     final axisLabelStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
           color: AppTheme.textMuted(context),
+          fontSize: 10,
         );
 
-    final times = readings.map((r) => r.recordedAt.millisecondsSinceEpoch.toDouble()).toList();
+    final times =
+        readings.map((r) => r.recordedAt.millisecondsSinceEpoch.toDouble()).toList();
     final timeMin = times.reduce((a, b) => a < b ? a : b);
     final timeMax = times.reduce((a, b) => a > b ? a : b);
     final timeSpan = timeMax - timeMin;
-    // Normalize X to [0, timeSpan] so fl_chart has manageable numbers.
     final temps = readings.map((r) => r.temperature).toList();
     final hums = readings.map((r) => r.humidity).toList();
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
       children: [
-        _ChartCard(
+        _ChartSection(
           title: '温度',
-          color: AppTheme.accentTemp,
           icon: Icons.thermostat,
+          color: AppTheme.accentTemp,
+          currentValue: '${temps.last.toStringAsFixed(1)}°C',
           chart: _buildChart(
             context: context,
             values: temps,
@@ -50,14 +52,14 @@ class HistoryChart extends StatelessWidget {
             timeSpan: timeSpan,
             color: AppTheme.accentTemp,
             axisLabelStyle: axisLabelStyle,
-            unitLabel: '°C',
           ),
         ),
-        const SizedBox(height: 24),
-        _ChartCard(
+        const SizedBox(height: 16),
+        _ChartSection(
           title: '湿度',
-          color: AppTheme.accentHumidity,
           icon: Icons.water_drop,
+          color: AppTheme.accentHumidity,
+          currentValue: '${hums.last.toStringAsFixed(1)}%',
           chart: _buildChart(
             context: context,
             values: hums,
@@ -66,10 +68,9 @@ class HistoryChart extends StatelessWidget {
             timeSpan: timeSpan,
             color: AppTheme.accentHumidity,
             axisLabelStyle: axisLabelStyle,
-            unitLabel: '%',
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
       ],
     );
   }
@@ -95,7 +96,6 @@ class HistoryChart extends StatelessWidget {
     required double timeSpan,
     required Color color,
     required TextStyle? axisLabelStyle,
-    required String unitLabel,
   }) {
     final spots = List.generate(values.length, (i) {
       return FlSpot(
@@ -104,9 +104,7 @@ class HistoryChart extends StatelessWidget {
       );
     });
 
-    // Compute nice X tick interval
     final xInterval = _niceXInterval(timeSpan);
-
     final minY = _computeMin(values);
     final maxY = _computeMax(values);
     final yInterval = _niceInterval(minY, maxY);
@@ -115,6 +113,10 @@ class HistoryChart extends StatelessWidget {
     final peaks = peakIndices.toSet();
     final troughs = troughIndices.toSet();
 
+    // Determine which Y ticks to label — only the first and last.
+    final firstYTick = (minY / yInterval).ceil() * yInterval;
+    final lastYTick = (maxY / yInterval).floor() * yInterval;
+
     return LineChart(
       LineChartData(
         minY: minY,
@@ -122,18 +124,16 @@ class HistoryChart extends StatelessWidget {
         clipData: const FlClipData.all(),
         gridData: FlGridData(
           show: true,
-          drawVerticalLine: true,
+          drawVerticalLine: false,
           horizontalInterval: yInterval,
           verticalInterval: xInterval,
           getDrawingHorizontalLine: (_) => FlLine(
             color: AppTheme.gridLine(context),
             strokeWidth: 1,
-            dashArray: [4, 4],
           ),
           getDrawingVerticalLine: (_) => FlLine(
             color: AppTheme.gridLine(context),
             strokeWidth: 1,
-            dashArray: [4, 4],
           ),
         ),
         titlesData: FlTitlesData(
@@ -145,47 +145,38 @@ class HistoryChart extends StatelessWidget {
             sideTitles: SideTitles(showTitles: false),
           ),
           leftTitles: AxisTitles(
-            axisNameWidget: Text(unitLabel, style: axisLabelStyle),
-            axisNameSize: 20,
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 52,
+              reservedSize: 36,
               interval: yInterval,
-              getTitlesWidget: (value, meta) => Text(
-                value.toStringAsFixed(1),
-                style: axisLabelStyle,
-              ),
+              getTitlesWidget: (value, meta) {
+                // Only show first and last Y tick labels.
+                if ((value - firstYTick).abs() > 0.001 &&
+                    (value - lastYTick).abs() > 0.001) {
+                  return const SizedBox.shrink();
+                }
+                return Text(
+                  value.toStringAsFixed(1),
+                  style: axisLabelStyle,
+                );
+              },
             ),
           ),
           bottomTitles: AxisTitles(
-            axisNameWidget: Text(
-              switch (range) {
-                HistoryRange.day => '时间',
-                HistoryRange.week || HistoryRange.month => '日期',
-              },
-              style: axisLabelStyle,
-            ),
-            axisNameSize: 20,
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 28,
+              reservedSize: 20,
               interval: xInterval,
               getTitlesWidget: (value, meta) {
-                return Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    _formatX(value, timeMin),
-                    style: axisLabelStyle?.copyWith(fontSize: 10),
-                  ),
+                return Text(
+                  _formatX(value, timeMin),
+                  style: axisLabelStyle?.copyWith(fontSize: 10),
                 );
               },
             ),
           ),
         ),
-        borderData: FlBorderData(
-          show: true,
-          border: Border.all(color: AppTheme.border(context), width: 1),
-        ),
+        borderData: FlBorderData(show: false),
         lineBarsData: [
           LineChartBarData(
             spots: spots,
@@ -240,7 +231,7 @@ class HistoryChart extends StatelessWidget {
                 if (peaks.contains(index)) suffix = '  ↑ 峰值';
                 if (troughs.contains(index)) suffix = '  ↓ 谷值';
                 return LineTooltipItem(
-                  '$timeStr\n${value.toStringAsFixed(2)}$unitLabel$suffix',
+                  '$timeStr\n${value.toStringAsFixed(2)}$suffix',
                   TextStyle(
                     color: color,
                     fontSize: 13,
@@ -258,20 +249,15 @@ class HistoryChart extends StatelessWidget {
 
   /// Choose a nice X tick interval (in ms) so we get 4-6 labels.
   double _niceXInterval(double timeSpanMs) {
-    // For 24h: show ~6 ticks (every 4 hours = 14,400,000 ms)
-    // For 7d: show ~7 ticks (every 1 day = 86,400,000 ms)
-    // For 30d: show ~6 ticks (every 5 days = 432,000,000 ms)
     if (timeSpanMs <= 0) return 1;
 
     if (range == HistoryRange.day) {
-      // Target ~6 ticks → every 4 hours
       if (timeSpanMs > 12 * 3600000) return 4 * 3600000; // 4h
       return 2 * 3600000; // 2h
     }
     if (range == HistoryRange.week) {
       return 86400000; // 1 day
     }
-    // month
     return 5 * 86400000; // 5 days
   }
 
@@ -345,52 +331,64 @@ class HistoryChart extends StatelessWidget {
   }
 }
 
-class _ChartCard extends StatelessWidget {
+/// A compact chart section with title + current value + chart.
+class _ChartSection extends StatelessWidget {
   final String title;
-  final Color color;
   final IconData icon;
+  final Color color;
+  final String currentValue;
   final Widget chart;
 
-  const _ChartCard({
+  const _ChartSection({
     required this.title,
-    required this.color,
     required this.icon,
+    required this.color,
+    required this.currentValue,
     required this.chart,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: AppTheme.bgSecondary(context),
-      shape: RoundedRectangleBorder(
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: AppTheme.bgSecondary(context),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4, top: 2, bottom: 8),
+            child: Row(
               children: [
-                Icon(icon, color: color, size: 20),
-                const SizedBox(width: 8),
+                Icon(icon, color: color, size: 16),
+                const SizedBox(width: 6),
                 Text(
                   title,
                   style: TextStyle(
+                    color: AppTheme.textSecondary(context),
+                    fontWeight: FontWeight.w500,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  currentValue,
+                  style: TextStyle(
                     color: AppTheme.textPrimary(context),
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     fontSize: 15,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 200,
-              child: chart,
-            ),
-          ],
-        ),
+          ),
+          SizedBox(
+            height: 170,
+            child: chart,
+          ),
+        ],
       ),
     );
   }
