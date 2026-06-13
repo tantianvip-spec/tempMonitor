@@ -189,8 +189,8 @@ class HistoryChart extends StatelessWidget {
         lineBarsData: [
           LineChartBarData(
             spots: spots,
-            isCurved: true,
-            curveSmoothness: 0.2,
+            isCurved: false,
+            preventCurveOverShooting: true,
             color: color,
             barWidth: 2.5,
             isStrokeCapRound: true,

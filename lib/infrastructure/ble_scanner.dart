@@ -27,6 +27,7 @@ class BleScanner {
   DateTime? _lastBluetoothOffLog;
   bool _initialized = false;
   bool _scanning = false;
+  StreamSubscription? _scanSubscription;
 
   /// Stream of scan results emitted after each scan window.
   final _scanResultsController =
@@ -35,8 +36,6 @@ class BleScanner {
 
   Future<void> _ensureInitialized() async {
     if (_initialized) {
-      // Re-check: if adapter is off (not unknown), re-init to pick up
-      // state changes.
       if (FlutterBluePlus.adapterStateNow != BluetoothAdapterState.unknown &&
           FlutterBluePlus.adapterStateNow == BluetoothAdapterState.off) {
         _initialized = false;
@@ -44,8 +43,6 @@ class BleScanner {
         return;
       }
     }
-    // Wait for the adapter state stream to emit a definitive state
-    // (not 'unknown').
     await FlutterBluePlus.adapterState
         .firstWhere((s) => s != BluetoothAdapterState.unknown);
     _initialized = true;
@@ -83,82 +80,103 @@ class BleScanner {
     final scanTimeout = timeout ?? const Duration(seconds: 4);
     _scanning = true;
 
+    // Collect results in real time from onScanResult.
+    final nearbyDevices = <NearbyDevice>[];
+    final bthomeReadings = <Reading>[];
+
+    _scanSubscription?.cancel();
+    _scanSubscription = FlutterBluePlus.onScanResults.listen((results) {
+      final now = DateTime.now();
+      for (final result in results) {
+        _processResult(result, now, nearbyDevices, bthomeReadings);
+      }
+    });
+
     try {
       await FlutterBluePlus.startScan(
         timeout: scanTimeout,
       );
 
+      // Wait for scan to complete.
       await Future.delayed(scanTimeout + const Duration(seconds: 1));
     } finally {
       _scanning = false;
+      _scanSubscription?.cancel();
+      _scanSubscription = null;
       try {
         await FlutterBluePlus.stopScan();
       } catch (_) {}
     }
 
-    // Process accumulated results.
-    final results = FlutterBluePlus.lastScanResults;
-    final now = DateTime.now();
-    final nearbyDevices = <NearbyDevice>[];
-    final bthomeReadings = <Reading>[];
-
-    for (final result in results) {
-      final deviceId = result.device.remoteId.str;
-      final rssi = result.rssi;
-
-      // Check if this device has BThome service data.
-      final serviceData = result.advertisementData.serviceData;
-      final guid = Guid(AppConstants.bthomeServiceUuid);
-      final bytes = serviceData[guid];
-      final isBThome = bytes != null && bytes.isNotEmpty;
-
-      nearbyDevices.add(NearbyDevice(
-        deviceId: deviceId,
-        name: result.device.advName.isNotEmpty
-            ? result.device.advName
-            : null,
-        rssi: rssi,
-        isBThomeCompatible: isBThome,
-        lastSeen: now,
-      ));
-
-      // Parse BThome data if present.
-      if (isBThome) {
-        final lastSeen = _lastSeen[deviceId];
-        if (lastSeen != null && now.difference(lastSeen) < _debounceDuration) {
-          continue;
-        }
-        try {
-          final reading = BThomeParser.parse(
-            bytes,
-            deviceId: deviceId,
-            rssi: rssi,
-          );
-          _lastSeen[deviceId] = now;
-          bthomeReadings.add(reading);
-          DebugLogger().i(
-              'BThome $deviceId: ${reading.temperature}°C ${reading.humidity}%',
-              tag: 'BleScanner');
-        } on BThomeParseException catch (e) {
-          // Partial BLE advertisement (e.g. battery-only, temp-only) is
-          // normal — the next broadcast will likely carry a full packet.
-          final last = _lastParseError[deviceId];
-          if (last == null || now.difference(last) > _parseErrorDebounce) {
-            _lastParseError[deviceId] = now;
-            DebugLogger().d('Partial BThome packet from $deviceId: $e', tag: 'BleScanner');
-          }
-        }
-      }
-    }
+    // Wait a short moment for any remaining onScanResult callbacks.
+    await Future.delayed(const Duration(milliseconds: 200));
 
     _scanResultsController.add(ScanResultBundle(
-      nearbyDevices: nearbyDevices,
-      bthomeReadings: bthomeReadings,
+      nearbyDevices: List.from(nearbyDevices),
+      bthomeReadings: List.from(bthomeReadings),
     ));
 
     // Forward BThome readings to the handler set by ScanService.
     for (final reading in bthomeReadings) {
       onReading?.call(reading);
+    }
+  }
+
+  void _processResult(
+    ScanResult result,
+    DateTime now,
+    List<NearbyDevice> nearbyDevices,
+    List<Reading> bthomeReadings,
+  ) {
+    final deviceId = result.device.remoteId.str;
+    final rssi = result.rssi;
+
+    // Check if this device has BThome service data.
+    final serviceData = result.advertisementData.serviceData;
+    final guid = Guid(AppConstants.bthomeServiceUuid);
+    final bytes = serviceData[guid];
+    final isBThome = bytes != null && bytes.isNotEmpty;
+
+    // Update nearby list — replace existing or append.
+    final existingIdx = nearbyDevices.indexWhere((d) => d.deviceId == deviceId);
+    final nearby = NearbyDevice(
+      deviceId: deviceId,
+      name: result.device.advName.isNotEmpty ? result.device.advName : null,
+      rssi: rssi,
+      isBThomeCompatible: isBThome,
+      lastSeen: now,
+    );
+    if (existingIdx >= 0) {
+      nearbyDevices[existingIdx] = nearby;
+    } else {
+      nearbyDevices.add(nearby);
+    }
+
+    // Parse BThome data if present.
+    if (!isBThome) return;
+
+    final lastSeen = _lastSeen[deviceId];
+    if (lastSeen != null && now.difference(lastSeen) < _debounceDuration) {
+      return;
+    }
+    try {
+      final reading = BThomeParser.parse(
+        bytes,
+        deviceId: deviceId,
+        rssi: rssi,
+      );
+      _lastSeen[deviceId] = now;
+      bthomeReadings.add(reading);
+      DebugLogger().i(
+          'BThome $deviceId: ${reading.temperature.toStringAsFixed(2)}°C ${reading.humidity.toStringAsFixed(2)}%',
+          tag: 'BleScanner');
+    } on BThomeParseException catch (e) {
+      final last = _lastParseError[deviceId];
+      if (last == null || now.difference(last) > _parseErrorDebounce) {
+        _lastParseError[deviceId] = now;
+        DebugLogger().d(
+            'Partial BThome packet from $deviceId: $e', tag: 'BleScanner');
+      }
     }
   }
 

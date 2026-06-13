@@ -125,14 +125,14 @@ class BThomeParser {
         case _objectIdTemperatureHigh:
           if (offset + 1 >= bytes.length) continue;
           final raw = byteData.getInt16(offset, Endian.little);
-          temperature = raw * 0.01;
+          temperature = raw / 100;
           offset += 2;
           if (humidity != null) break _parseLoop;
         case _objectIdHumidity:
         case _objectIdHumidityHigh:
           if (offset + 1 >= bytes.length) continue;
           final raw = byteData.getUint16(offset, Endian.little);
-          humidity = raw * 0.01;
+          humidity = raw / 100;
           offset += 2;
         default:
           // BThome v2: IDs 0x40–0x7F are 0-length (flags), IDs ≥0x80
