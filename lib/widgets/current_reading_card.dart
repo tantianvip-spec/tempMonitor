@@ -31,7 +31,7 @@ class CurrentReadingCard extends StatelessWidget {
                 Text(
                   label.toUpperCase(),
                   style: textTheme.labelSmall?.copyWith(
-                    color: AppTheme.textSecondary,
+                    color: AppTheme.textSecondary(context),
                   ),
                 ),
               ],

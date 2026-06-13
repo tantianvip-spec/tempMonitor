@@ -24,7 +24,7 @@ class HistoryChart extends StatelessWidget {
     }
 
     final axisLabelStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: AppTheme.textMuted,
+          color: AppTheme.textMuted(context),
         );
 
     final times = readings.map((r) => r.recordedAt.millisecondsSinceEpoch.toDouble()).toList();
@@ -43,6 +43,7 @@ class HistoryChart extends StatelessWidget {
           color: AppTheme.accentTemp,
           icon: Icons.thermostat,
           chart: _buildChart(
+            context: context,
             values: temps,
             times: times,
             timeMin: timeMin,
@@ -58,6 +59,7 @@ class HistoryChart extends StatelessWidget {
           color: AppTheme.accentHumidity,
           icon: Icons.water_drop,
           chart: _buildChart(
+            context: context,
             values: hums,
             times: times,
             timeMin: timeMin,
@@ -86,6 +88,7 @@ class HistoryChart extends StatelessWidget {
   }
 
   Widget _buildChart({
+    required BuildContext context,
     required List<double> values,
     required List<double> times,
     required double timeMin,
@@ -122,13 +125,13 @@ class HistoryChart extends StatelessWidget {
           drawVerticalLine: true,
           horizontalInterval: yInterval,
           verticalInterval: xInterval,
-          getDrawingHorizontalLine: (_) => const FlLine(
-            color: AppTheme.gridLine,
+          getDrawingHorizontalLine: (_) => FlLine(
+            color: AppTheme.gridLine(context),
             strokeWidth: 1,
             dashArray: [4, 4],
           ),
-          getDrawingVerticalLine: (_) => const FlLine(
-            color: AppTheme.gridLine,
+          getDrawingVerticalLine: (_) => FlLine(
+            color: AppTheme.gridLine(context),
             strokeWidth: 1,
             dashArray: [4, 4],
           ),
@@ -181,7 +184,7 @@ class HistoryChart extends StatelessWidget {
         ),
         borderData: FlBorderData(
           show: true,
-          border: Border.all(color: AppTheme.border, width: 1),
+          border: Border.all(color: AppTheme.border(context), width: 1),
         ),
         lineBarsData: [
           LineChartBarData(
@@ -199,7 +202,7 @@ class HistoryChart extends StatelessWidget {
                     radius: 5,
                     strokeWidth: 2,
                     strokeColor: AppTheme.accentDanger,
-                    color: AppTheme.bgPrimary,
+                    color: AppTheme.bgPrimary(context),
                   );
                 }
                 if (troughs.contains(index)) {
@@ -207,7 +210,7 @@ class HistoryChart extends StatelessWidget {
                     radius: 5,
                     strokeWidth: 2,
                     strokeColor: AppTheme.accentSuccess,
-                    color: AppTheme.bgPrimary,
+                    color: AppTheme.bgPrimary(context),
                   );
                 }
                 return FlDotCirclePainter(
@@ -226,7 +229,7 @@ class HistoryChart extends StatelessWidget {
         lineTouchData: LineTouchData(
           enabled: true,
           touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (_) => AppTheme.bgSecondary,
+            getTooltipColor: (_) => AppTheme.bgSecondary(context),
             tooltipRoundedRadius: 8,
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {
@@ -358,7 +361,7 @@ class _ChartCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: AppTheme.bgSecondary,
+      color: AppTheme.bgSecondary(context),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
@@ -373,8 +376,8 @@ class _ChartCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
+                  style: TextStyle(
+                    color: AppTheme.textPrimary(context),
                     fontWeight: FontWeight.w600,
                     fontSize: 15,
                   ),

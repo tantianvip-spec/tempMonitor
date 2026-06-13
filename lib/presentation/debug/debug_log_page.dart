@@ -37,10 +37,10 @@ class DebugLogPage extends StatelessWidget {
       body: BlocBuilder<DebugLogCubit, DebugLogState>(
         builder: (context, state) {
           if (state.entries.isEmpty) {
-            return const Center(
+            return Center(
               child: Text(
                 '暂无日志',
-                style: TextStyle(color: AppTheme.textMuted),
+                style: TextStyle(color: AppTheme.textMuted(context)),
               ),
             );
           }
@@ -55,8 +55,8 @@ class DebugLogPage extends StatelessWidget {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: AppTheme.bgTertiary,
-        foregroundColor: AppTheme.textPrimary,
+        backgroundColor: AppTheme.bgTertiary(context),
+        foregroundColor: AppTheme.textPrimary(context),
         onPressed: () => context.read<DebugLogCubit>().refresh(),
         child: const Icon(Icons.refresh),
       ),
@@ -79,35 +79,35 @@ class _LogEntryTile extends StatelessWidget {
           width: 8,
           height: 8,
           decoration: BoxDecoration(
-            color: _colorForLevel(entry.level),
+            color: _colorForLevel(entry.level, context),
             shape: BoxShape.circle,
           ),
         ),
       ),
       title: Text(
         '[${entry.tag}] ${entry.message}',
-        style: const TextStyle(
-          color: AppTheme.textPrimary,
+        style: TextStyle(
+          color: AppTheme.textPrimary(context),
           fontSize: 13,
         ),
       ),
       subtitle: Text(
         entry.timestamp.toIso8601String(),
-        style: const TextStyle(
-          color: AppTheme.textMuted,
+        style: TextStyle(
+          color: AppTheme.textMuted(context),
           fontSize: 11,
         ),
       ),
     );
   }
 
-  static Color _colorForLevel(LogLevel level) {
+  Color _colorForLevel(LogLevel level, BuildContext context) {
     return switch (level) {
       LogLevel.error => AppTheme.accentDanger,
       LogLevel.warning => AppTheme.accentWarning,
       LogLevel.info => AppTheme.accentHumidity,
-      LogLevel.debug => AppTheme.textMuted,
-      LogLevel.verbose => AppTheme.textMuted.withOpacity(0.5),
+      LogLevel.debug => AppTheme.textMuted(context),
+      LogLevel.verbose => AppTheme.textMuted(context).withOpacity(0.5),
     };
   }
 }

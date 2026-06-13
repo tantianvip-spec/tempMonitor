@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:temp_monitor/services/scan_service.dart';
@@ -20,6 +21,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       humidityMin: _settings.getHumidityMin(),
       humidityMax: _settings.getHumidityMax(),
       mockDeviceEnabled: _settings.getMockDeviceEnabled(),
+      themeMode: _settings.getThemeMode(),
     ));
   }
 
@@ -53,6 +55,11 @@ class SettingsCubit extends Cubit<SettingsState> {
     emit(state.copyWith(mockDeviceEnabled: enabled));
     _scanService.restart();
   }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    await _settings.setThemeMode(mode);
+    emit(state.copyWith(themeMode: mode));
+  }
 }
 
 class SettingsState extends Equatable {
@@ -63,6 +70,7 @@ class SettingsState extends Equatable {
   final double humidityMin;
   final double humidityMax;
   final bool mockDeviceEnabled;
+  final ThemeMode themeMode;
 
   const SettingsState({
     this.scanIntervalSeconds = 5,
@@ -72,6 +80,7 @@ class SettingsState extends Equatable {
     this.humidityMin = 20,
     this.humidityMax = 80,
     this.mockDeviceEnabled = false,
+    this.themeMode = ThemeMode.system,
   });
 
   SettingsState copyWith({
@@ -82,6 +91,7 @@ class SettingsState extends Equatable {
     double? humidityMin,
     double? humidityMax,
     bool? mockDeviceEnabled,
+    ThemeMode? themeMode,
   }) =>
       SettingsState(
         scanIntervalSeconds: scanIntervalSeconds ?? this.scanIntervalSeconds,
@@ -91,6 +101,7 @@ class SettingsState extends Equatable {
         humidityMin: humidityMin ?? this.humidityMin,
         humidityMax: humidityMax ?? this.humidityMax,
         mockDeviceEnabled: mockDeviceEnabled ?? this.mockDeviceEnabled,
+        themeMode: themeMode ?? this.themeMode,
       );
 
   @override
@@ -102,5 +113,6 @@ class SettingsState extends Equatable {
         humidityMin,
         humidityMax,
         mockDeviceEnabled,
+        themeMode,
       ];
 }

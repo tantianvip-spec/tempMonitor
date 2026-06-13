@@ -105,6 +105,28 @@ class SettingsPage extends StatelessWidget {
                 },
               ),
               const Divider(indent: 16, endIndent: 16),
+              const _SectionHeader(title: '外观'),
+              ListTile(
+                title: const Text('主题'),
+                subtitle: Text(_themeLabel(state.themeMode)),
+                trailing: DropdownButton<ThemeMode>(
+                  value: state.themeMode,
+                  underline: const SizedBox(),
+                  items: const [
+                    DropdownMenuItem(
+                        value: ThemeMode.system, child: Text('跟随系统')),
+                    DropdownMenuItem(
+                        value: ThemeMode.light, child: Text('浅色')),
+                    DropdownMenuItem(value: ThemeMode.dark, child: Text('深色')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      context.read<SettingsCubit>().setThemeMode(value);
+                    }
+                  },
+                ),
+              ),
+              const Divider(indent: 16, endIndent: 16),
               const _SectionHeader(title: '开发'),
               SwitchListTile(
                 title: const Text('模拟设备模式'),
@@ -155,13 +177,21 @@ class _SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
       child: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: AppTheme.textMuted,
+          color: AppTheme.textMuted(context),
           letterSpacing: 0.5,
         ),
       ),
     );
   }
+}
+
+String _themeLabel(ThemeMode mode) {
+  return switch (mode) {
+    ThemeMode.system => '跟随系统',
+    ThemeMode.light => '浅色',
+    ThemeMode.dark => '深色',
+  };
 }

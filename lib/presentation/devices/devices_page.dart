@@ -189,9 +189,9 @@ class _ScanDrawer extends StatelessWidget {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 border: Border(
-                  bottom: BorderSide(color: AppTheme.border, width: 1),
+                  bottom: BorderSide(color: AppTheme.border(context), width: 1),
                 ),
               ),
               child: Row(
@@ -200,7 +200,7 @@ class _ScanDrawer extends StatelessWidget {
                     PhosphorIcons.bluetoothConnected(),
                     color: isScanning
                         ? AppTheme.accentTemp
-                        : AppTheme.textMuted,
+                        : AppTheme.textMuted(context),
                     size: 28,
                   ),
                   const SizedBox(width: 12),
@@ -208,10 +208,10 @@ class _ScanDrawer extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           '蓝牙扫描',
                           style: TextStyle(
-                            color: AppTheme.textPrimary,
+                            color: AppTheme.textPrimary(context),
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
                           ),
@@ -219,8 +219,8 @@ class _ScanDrawer extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           isScanning ? '正在扫描…' : '点击按钮开始扫描',
-                          style: const TextStyle(
-                            color: AppTheme.textMuted,
+                          style: TextStyle(
+                            color: AppTheme.textMuted(context),
                             fontSize: 13,
                           ),
                         ),
@@ -270,9 +270,9 @@ class _ScanDrawer extends StatelessWidget {
 
             // Divider
             if (nearbyDevices.isNotEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
-                child: Divider(color: AppTheme.border, height: 1),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Divider(color: AppTheme.border(context), height: 1),
               ),
 
             // Nearby device list
@@ -281,8 +281,8 @@ class _ScanDrawer extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                 child: Text(
                   '附近的设备 (${nearbyDevices.length})',
-                  style: const TextStyle(
-                    color: AppTheme.textSecondary,
+                  style: TextStyle(
+                    color: AppTheme.textSecondary(context),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.5,
@@ -303,15 +303,15 @@ class _ScanDrawer extends StatelessWidget {
                                   ? PhosphorIcons.wifiSlash()
                                   : PhosphorIcons.bluetoothSlash(),
                               size: 48,
-                              color: AppTheme.textMuted,
+                              color: AppTheme.textMuted(context),
                             ),
                             const SizedBox(height: 12),
                             Text(
                               isScanning
                                   ? '正在搜索蓝牙设备…'
                                   : '未扫描到设备',
-                              style: const TextStyle(
-                                color: AppTheme.textMuted,
+                              style: TextStyle(
+                                color: AppTheme.textMuted(context),
                                 fontSize: 14,
                               ),
                             ),
@@ -378,7 +378,7 @@ class _NearbyDeviceTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: device.isBThomeCompatible
               ? AppTheme.accentSuccess.withOpacity(0.15)
-              : AppTheme.bgTertiary,
+              : AppTheme.bgTertiary(context),
           borderRadius: BorderRadius.circular(8),
         ),
         alignment: Alignment.center,
@@ -388,7 +388,7 @@ class _NearbyDeviceTile extends StatelessWidget {
               : PhosphorIcons.bluetoothSlash(),
           color: device.isBThomeCompatible
               ? AppTheme.accentSuccess
-              : AppTheme.textMuted,
+              : AppTheme.textMuted(context),
           size: 18,
         ),
       ),
@@ -398,8 +398,8 @@ class _NearbyDeviceTile extends StatelessWidget {
             child: Text(
               device.name ?? device.deviceId,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppTheme.textPrimary,
+              style: TextStyle(
+                color: AppTheme.textPrimary(context),
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
               ),
@@ -411,7 +411,7 @@ class _NearbyDeviceTile extends StatelessWidget {
             decoration: BoxDecoration(
               color: device.isBThomeCompatible
                   ? AppTheme.accentSuccess.withOpacity(0.2)
-                  : AppTheme.textMuted.withOpacity(0.2),
+                  : AppTheme.textMuted(context).withOpacity(0.2),
               borderRadius: BorderRadius.circular(3),
             ),
             child: Text(
@@ -421,7 +421,7 @@ class _NearbyDeviceTile extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 color: device.isBThomeCompatible
                     ? AppTheme.accentSuccess
-                    : AppTheme.textMuted,
+                    : AppTheme.textMuted(context),
               ),
             ),
           ),
@@ -429,7 +429,7 @@ class _NearbyDeviceTile extends StatelessWidget {
       ),
       subtitle: Text(
         '信号: ${device.rssi} dBm',
-        style: const TextStyle(color: AppTheme.textMuted, fontSize: 11),
+        style: TextStyle(color: AppTheme.textMuted(context), fontSize: 11),
       ),
       trailing: device.isBThomeCompatible
           ? const Icon(Icons.add_circle_outline,
@@ -452,10 +452,10 @@ class _DeviceCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Card(
-        color: AppTheme.bgSecondary,
+        color: AppTheme.bgSecondary(context),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: const BorderSide(color: AppTheme.border, width: 1),
+          side: BorderSide(color: AppTheme.border(context), width: 1),
         ),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -466,7 +466,7 @@ class _DeviceCard extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: AppTheme.bgTertiary,
+                  color: AppTheme.bgTertiary(context),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 alignment: Alignment.center,
@@ -485,8 +485,8 @@ class _DeviceCard extends StatelessWidget {
                   children: [
                     Text(
                       device.name,
-                      style: const TextStyle(
-                        color: AppTheme.textPrimary,
+                      style: TextStyle(
+                        color: AppTheme.textPrimary(context),
                         fontWeight: FontWeight.w700,
                         fontSize: 15,
                       ),
@@ -496,16 +496,16 @@ class _DeviceCard extends StatelessWidget {
                       future: repository.getLatestReading(device.id),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const Text(
+                          return Text(
                             '加载中…',
-                            style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                            style: TextStyle(color: AppTheme.textMuted(context), fontSize: 12),
                           );
                         }
                         final reading = snapshot.data;
                         if (reading == null) {
-                          return const Text(
+                          return Text(
                             '暂无数据',
-                            style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                            style: TextStyle(color: AppTheme.textMuted(context), fontSize: 12),
                           );
                         }
                         return Row(
@@ -540,9 +540,9 @@ class _DeviceCard extends StatelessWidget {
               ),
 
               // Chevron
-              const Icon(
+              Icon(
                 Icons.chevron_right,
-                color: AppTheme.textMuted,
+                color: AppTheme.textMuted(context),
                 size: 22,
               ),
             ],
@@ -576,13 +576,13 @@ class _EmptyState extends StatelessWidget {
                   ? PhosphorIcons.wrench()
                   : PhosphorIcons.bluetoothConnected(),
               size: 64,
-              color: AppTheme.textMuted,
+              color: AppTheme.textMuted(context),
             ),
             const SizedBox(height: 16),
             Text(
               mockMode ? '模拟设备模式已开启' : '未发现设备',
-              style: const TextStyle(
-                color: AppTheme.textSecondary,
+              style: TextStyle(
+                color: AppTheme.textSecondary(context),
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
@@ -593,7 +593,7 @@ class _EmptyState extends StatelessWidget {
                   ? '等待模拟数据生成中…\n如果长时间无数据，请检查"设置"页面'
                   : '请添加蓝牙温湿度传感器',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppTheme.textMuted, fontSize: 13),
+              style: TextStyle(color: AppTheme.textMuted(context), fontSize: 13),
             ),
             if (!mockMode) ...[
               const SizedBox(height: 24),
@@ -606,7 +606,7 @@ class _EmptyState extends StatelessWidget {
             const SizedBox(height: 12),
             TextButton(
               onPressed: () => scanService.restart(),
-              child: const Text('重新启动扫描', style: TextStyle(color: AppTheme.textMuted)),
+              child: Text('重新启动扫描', style: TextStyle(color: AppTheme.textMuted(context))),
             ),
           ],
         ),

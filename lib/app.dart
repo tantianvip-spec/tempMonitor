@@ -44,12 +44,16 @@ class TempMonitorApp extends StatelessWidget {
         providers: [
           BlocProvider(create: (_) => SettingsCubit(settings, scanService)),
         ],
-        child: MaterialApp(
-          title: '温湿度监控',
-          theme: AppTheme.darkTheme(),
-          darkTheme: AppTheme.darkTheme(),
-          themeMode: ThemeMode.dark,
-          home: const MainNavigationScreen(),
+        child: BlocBuilder<SettingsCubit, SettingsState>(
+          builder: (context, state) {
+            return MaterialApp(
+              title: '温湿度监控',
+              theme: AppTheme.lightTheme(),
+              darkTheme: AppTheme.darkTheme(),
+              themeMode: state.themeMode,
+              home: const MainNavigationScreen(),
+            );
+          },
         ),
       ),
     );
