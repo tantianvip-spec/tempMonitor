@@ -21,7 +21,9 @@ class ScanResultBundle {
 
 class BleScanner {
   final _lastSeen = <String, DateTime>{};
+  final _lastParseError = <String, DateTime>{};
   static const _debounceDuration = Duration(seconds: 1);
+  static const _parseErrorDebounce = Duration(seconds: 30);
   DateTime? _lastBluetoothOffLog;
   bool _initialized = false;
   bool _scanning = false;
@@ -138,7 +140,11 @@ class BleScanner {
               'BThome $deviceId: ${reading.temperature}°C ${reading.humidity}%',
               tag: 'BleScanner');
         } on BThomeParseException catch (e) {
-          DebugLogger().w('Failed to parse $deviceId: $e', tag: 'BleScanner');
+          final last = _lastParseError[deviceId];
+          if (last == null || now.difference(last) > _parseErrorDebounce) {
+            _lastParseError[deviceId] = now;
+            DebugLogger().w('Failed to parse $deviceId: $e', tag: 'BleScanner');
+          }
         }
       }
     }

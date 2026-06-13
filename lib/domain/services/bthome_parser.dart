@@ -10,6 +10,7 @@ class BThomeParseException implements Exception {
 }
 
 class BThomeParser {
+  static const int _objectIdPacketId = 0x00;
   static const int _objectIdBattery = 0x01;
   static const int _objectIdTemperature = 0x02;
   static const int _objectIdHumidity = 0x03;
@@ -52,6 +53,13 @@ class BThomeParser {
       offset++;
 
       switch (objectId) {
+        case _objectIdPacketId:
+          // BThome v2 packet ID — 1 byte, used for deduplication.
+          // We don't need it since we track by device + timestamp.
+          if (offset >= bytes.length) {
+            throw BThomeParseException('Truncated packet_id field');
+          }
+          offset++;
         case _objectIdBattery:
           if (offset >= bytes.length) {
             throw BThomeParseException('Truncated battery field');
@@ -75,8 +83,10 @@ class BThomeParser {
           humidity = raw * 0.01;
           offset += 2;
         default:
-          throw BThomeParseException(
-              'Unknown object id: 0x${objectId.toRadixString(16)}');
+          // Unknown object ID — skip the byte and continue looking for
+          // known fields. Some BThome-like devices broadcast extra data
+          // alongside standard temperature/humidity.
+          continue;
       }
     }
 
