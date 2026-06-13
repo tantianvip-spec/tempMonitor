@@ -12,6 +12,7 @@ import 'package:temp_monitor/presentation/dashboard/dashboard_cubit.dart';
 import 'package:temp_monitor/presentation/dashboard/dashboard_page.dart';
 import 'package:temp_monitor/repositories/sensor_repository.dart';
 import 'package:temp_monitor/services/scan_service.dart';
+import 'package:temp_monitor/services/settings_service.dart';
 
 class DevicesPage extends StatefulWidget {
   const DevicesPage({super.key});
@@ -68,7 +69,7 @@ class _DevicesPageState extends State<DevicesPage> {
           }
           final devices = snapshot.data ?? const <Device>[];
           if (devices.isEmpty) {
-            return const _EmptyState();
+            return _EmptyState(scanService: context.read<ScanService>());
           }
           return ListView.separated(
             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -183,10 +184,13 @@ class _DeviceTile extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+  final ScanService scanService;
+
+  const _EmptyState({required this.scanService});
 
   @override
   Widget build(BuildContext context) {
+    final mockMode = context.read<SettingsService>().getMockDeviceEnabled();
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -194,24 +198,42 @@ class _EmptyState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              PhosphorIcons.thermometer(),
+              mockMode
+                  ? PhosphorIcons.wrench()
+                  : PhosphorIcons.bluetoothConnected(),
               size: 64,
               color: AppTheme.textMuted,
             ),
             const SizedBox(height: 16),
-            const Text(
-              '未发现设备',
-              style: TextStyle(
+            Text(
+              mockMode ? '模拟设备模式已开启' : '未发现设备',
+              style: const TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              '请确保设备在附近并已开启蓝牙',
+            Text(
+              mockMode
+                  ? '等待模拟数据生成中…\n如果长时间无数据，请检查"设置"页面'
+                  : '请确保设备在附近并已开启蓝牙\n或去"设置"中开启"模拟设备模式"',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
+              style: const TextStyle(color: AppTheme.textMuted, fontSize: 13),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () {
+                scanService.restart();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('已重新启动扫描'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('重新扫描'),
             ),
           ],
         ),

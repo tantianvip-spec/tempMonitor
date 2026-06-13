@@ -53,8 +53,12 @@ void main() async {
     notifications: notifications,
   );
 
-  // Do NOT auto-start scanning here. The user must explicitly start it
-  // from the devices page. This avoids any BLE / mock crash during boot.
+  // Auto-start scanning based on current settings (mock or BLE).
+  // This is safe because ScanService runs in the main isolate — no
+  // cross-process crashes. If Bluetooth is off and mock is disabled,
+  // the BLE scanner will gracefully log "Bluetooth not enabled" each
+  // tick; no crash.
+  scanService.start();
 
   DebugLogger().i('App initialized', tag: 'App');
 

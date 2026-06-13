@@ -9,6 +9,7 @@ import 'package:temp_monitor/infrastructure/debug_logger.dart';
 class BleScanner {
   final _lastSeen = <String, DateTime>{};
   static const _debounceDuration = Duration(seconds: 1);
+  DateTime? _lastBluetoothOffLog;
 
   Stream<Reading> scan({Duration? timeout}) async* {
     if (!await FlutterBluePlus.isSupported) {
@@ -17,7 +18,12 @@ class BleScanner {
     }
 
     if (FlutterBluePlus.adapterStateNow != BluetoothAdapterState.on) {
-      DebugLogger().e('Bluetooth is not enabled', tag: 'BleScanner');
+      final now = DateTime.now();
+      if (_lastBluetoothOffLog == null ||
+          now.difference(_lastBluetoothOffLog!) > const Duration(seconds: 30)) {
+        _lastBluetoothOffLog = now;
+        DebugLogger().e('Bluetooth is not enabled — turn on Bluetooth or enable "模拟设备模式" in Settings', tag: 'BleScanner');
+      }
       return;
     }
 
