@@ -115,33 +115,22 @@ class BThomeParser {
       switch (objectId) {
         case _objectIdPacketId:
           // BThome v2 packet ID — 1 byte, used for deduplication.
-          // We don't need it since we track by device + timestamp.
-          if (offset >= bytes.length) {
-            throw BThomeParseException('Truncated packet_id field');
-          }
+          if (offset >= bytes.length) continue;
           offset++;
         case _objectIdBattery:
-          if (offset >= bytes.length) {
-            throw BThomeParseException('Truncated battery field');
-          }
+          if (offset >= bytes.length) continue;
           battery = bytes[offset];
           offset++;
         case _objectIdTemperature:
         case _objectIdTemperatureHigh:
-          if (offset + 1 >= bytes.length) {
-            throw BThomeParseException('Truncated temperature field');
-          }
+          if (offset + 1 >= bytes.length) continue;
           final raw = byteData.getInt16(offset, Endian.little);
           temperature = raw * 0.01;
           offset += 2;
-          // Early exit if we already have both — don't re-parse
-          // trailing junk as known IDs.
           if (humidity != null) break _parseLoop;
         case _objectIdHumidity:
         case _objectIdHumidityHigh:
-          if (offset + 1 >= bytes.length) {
-            throw BThomeParseException('Truncated humidity field');
-          }
+          if (offset + 1 >= bytes.length) continue;
           final raw = byteData.getUint16(offset, Endian.little);
           humidity = raw * 0.01;
           offset += 2;
