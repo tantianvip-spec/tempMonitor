@@ -152,7 +152,7 @@ class HistoryChart extends StatelessWidget {
               reservedSize: 52,
               interval: yInterval,
               getTitlesWidget: (value, meta) => Text(
-                value.toStringAsFixed(2),
+                value.toStringAsFixed(1),
                 style: axisLabelStyle,
               ),
             ),
