@@ -14,8 +14,7 @@
     <application
         android:label="temp_monitor"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
-        tools:replace="android:exported">
+        android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -41,7 +40,8 @@
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="location"
-            android:exported="false" />
+            android:exported="false"
+            tools:replace="android:exported" />
 
         <receiver
             android:name="id.flutter.flutter_background_service.BootReceiver"
