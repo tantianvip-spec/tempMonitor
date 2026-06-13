@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:temp_monitor/app.dart';
 import 'package:temp_monitor/data/app_database.dart' hide Reading;
+import 'package:temp_monitor/infrastructure/background_service.dart';
 import 'package:temp_monitor/infrastructure/debug_logger.dart';
 import 'package:temp_monitor/infrastructure/permission_service.dart';
 import 'package:temp_monitor/infrastructure/notification_service.dart';
@@ -33,6 +34,10 @@ void main() async {
   // rebuilds. The debug assertion is a false positive here.
   Provider.debugCheckInvalidValueType = null;
 
+  // Initialize the background service first so it can start scanning
+  // in its own isolate before the UI is ready.
+  await BackgroundService.initialize();
+
   AppDatabase? database;
   try {
     database = AppDatabase();
@@ -51,7 +56,6 @@ void main() async {
   final scanService = ScanService(
     repository: repository,
     settings: settings,
-    notifications: notifications,
   );
 
   // Request BLE permissions before starting the scan loop.
@@ -59,7 +63,8 @@ void main() async {
   // flutter_blue_plus.startScan() to work.
   await PermissionService.requestBlePermissions();
 
-  // Auto-start scanning based on current settings (mock or BLE).
+  // Auto-start scanning — starts the background service for periodic
+  // BLE scanning and sets up the isolate port bridge.
   scanService.start();
 
   DebugLogger().i('App initialized', tag: 'App');

@@ -10,6 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_blue_plus: ^1.32.0
+  flutter_background_service: ^5.0.6
+  flutter_background_service_android: ^6.2.3
   drift: ^2.18.0
   drift_flutter: ^0.1.0
   flutter_bloc: ^8.1.6

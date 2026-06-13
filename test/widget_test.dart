@@ -32,7 +32,6 @@ void main() {
     final scanService = ScanService(
       repository: repo,
       settings: settings,
-      notifications: notifications,
     );
     // Skip notifications.initialize() — flutter_local_notifications needs
     // platform binding for plugin registration. The widget tree doesn't
