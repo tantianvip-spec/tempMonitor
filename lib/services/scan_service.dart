@@ -183,13 +183,15 @@ class ScanService {
             tag: 'ScanService');
 
         // Dynamic scan window: scan until every known device has contributed
-        // both temperature AND humidity. ATC_PVVX sensors advertise at
-        // ~5-10s intervals, so on average this completes in <10s per device.
-        // A 20s safety timeout ensures we never hang forever if a sensor
-        // misses a broadcast cycle.
+        // both temperature AND humidity. ATC_PVVX sensors advertise standard
+        // BThome packets (0x02 temp + 0x03 humidity) at irregular intervals
+        // — sometimes every 30s, sometimes minutes apart. A 60s safety timeout
+        // ensures we reliably catch at least one standard broadcast even when
+        // the sensor is in low-power mode. When the sensor is actively
+        // transmitting, the scan completes in 0-5s via early-stop.
         if (_knownDeviceIds.isNotEmpty) {
           await _scanner.startDynamicScan(
-            timeout: const Duration(seconds: 20),
+            timeout: const Duration(seconds: 60),
             knownDeviceIds: _knownDeviceIds,
           );
         } else {
@@ -233,7 +235,7 @@ class ScanService {
       _knownDeviceIds = devices.map((d) => d.id).toSet();
       if (_knownDeviceIds.isNotEmpty) {
         await _scanner.startDynamicScan(
-          timeout: const Duration(seconds: 20),
+          timeout: const Duration(seconds: 60),
           knownDeviceIds: _knownDeviceIds,
         );
       } else {

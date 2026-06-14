@@ -109,7 +109,7 @@ class BleScanner {
     Duration? timeout,
     required Set<String> knownDeviceIds,
   }) async {
-    final actualTimeout = timeout ?? const Duration(seconds: 20);
+    final actualTimeout = timeout ?? const Duration(seconds: 60);
     await _runScanWindow(
       timeout: actualTimeout,
       knownDeviceIds: knownDeviceIds,
