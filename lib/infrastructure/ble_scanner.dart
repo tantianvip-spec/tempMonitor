@@ -67,6 +67,16 @@ class BleScanner {
   /// Run one scan window of [duration]. Emits [ScanResultBundle] to
   /// [scanResults] when done.
   Future<void> scan({Duration? timeout}) async {
+    // If a scan is already in progress, skip this tick rather than
+    // interrupting it. Without this guard, a fast Timer (~5s) overlaps
+    // with the scan window (~4s scan + ~1s buffer = ~5s total), causing
+    // each tick to stopScan() the previous one — no scan ever completes.
+    if (_scanning) {
+      DebugLogger().d('Scan already in progress, skipping tick',
+          tag: 'BleScanner');
+      return;
+    }
+
     if (!await FlutterBluePlus.isSupported) {
       DebugLogger().e('BLE not supported on this device', tag: 'BleScanner');
       return;
@@ -84,13 +94,6 @@ class BleScanner {
             tag: 'BleScanner');
       }
       return;
-    }
-
-    // Stop any previous scan first.
-    if (_scanning) {
-      try {
-        await FlutterBluePlus.stopScan();
-      } catch (_) {}
     }
 
     final scanTimeout = timeout ?? const Duration(seconds: 4);
@@ -129,8 +132,10 @@ class BleScanner {
         }
       });
 
-      await FlutterBluePlus.startScan(timeout: scanTimeout);
-      await Future.delayed(scanTimeout + const Duration(seconds: 1));
+      // Start scan without timeout parameter — it returns immediately.
+      // We use Future.delayed to control the scan window duration.
+      await FlutterBluePlus.startScan();
+      await Future.delayed(scanTimeout);
     } finally {
       _scanning = false;
       await rtSub?.cancel();
