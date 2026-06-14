@@ -146,7 +146,15 @@ class ScanService {
     });
   }
 
-  void restart() => start();
+  void restart() {
+    // Re-read settings and push them to the background service if running.
+    _thresholdEngine = _createEngine(_settings);
+    if (BackgroundService.isAvailable) {
+      BackgroundService.updateSettings();
+    } else {
+      start();
+    }
+  }
 
   void forceRestart() {
     _currentMockMode = !_settings.getMockDeviceEnabled();
