@@ -221,6 +221,13 @@ class ScanService {
             '温度 ${reading.temperature?.toStringAsFixed(1) ?? "?"}°C / '
             '湿度 ${reading.humidity?.toStringAsFixed(1) ?? "?"}% 超出设定范围',
       );
+    } else if (state.justRecovered) {
+      _notifications.showAlert(
+        title: '温湿度已恢复',
+        body:
+            '温度 ${reading.temperature?.toStringAsFixed(1) ?? "?"}°C / '
+            '湿度 ${reading.humidity?.toStringAsFixed(1) ?? "?"}% 已回到正常范围',
+      );
     }
   }
 

@@ -183,17 +183,31 @@ class BackgroundService {
           humidity: reading.humidity,
         );
 
-        if (state.justBecameBreached && notifications != null) {
-          try {
-            await notifications.showAlert(
-              title: '温湿度告警',
-              body:
-                  '温度 ${reading.temperature?.toStringAsFixed(1) ?? "?"}°C / '
-                  '湿度 ${reading.humidity?.toStringAsFixed(1) ?? "?"}% 超出设定范围',
-            );
-          } catch (e) {
-            DebugLogger().e('Background notify error: $e',
-                tag: 'BackgroundService');
+        if (notifications != null) {
+          if (state.justBecameBreached) {
+            try {
+              await notifications.showAlert(
+                title: '温湿度告警',
+                body:
+                    '温度 ${reading.temperature?.toStringAsFixed(1) ?? "?"}°C / '
+                    '湿度 ${reading.humidity?.toStringAsFixed(1) ?? "?"}% 超出设定范围',
+              );
+            } catch (e) {
+              DebugLogger().e('Background notify error: $e',
+                  tag: 'BackgroundService');
+            }
+          } else if (state.justRecovered) {
+            try {
+              await notifications.showAlert(
+                title: '温湿度已恢复',
+                body:
+                    '温度 ${reading.temperature?.toStringAsFixed(1) ?? "?"}°C / '
+                    '湿度 ${reading.humidity?.toStringAsFixed(1) ?? "?"}% 已回到正常范围',
+              );
+            } catch (e) {
+              DebugLogger().e('Background notify error: $e',
+                  tag: 'BackgroundService');
+            }
           }
         }
       }
