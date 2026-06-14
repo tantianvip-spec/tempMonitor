@@ -94,9 +94,39 @@ class BleScanner {
     );
   }
 
+  /// Tracks which known devices have had temperature and/or humidity
+  /// received in the current scan window. Used by [startDynamicScan] to
+  /// early-stop once every known device has both values.
+  ///
+  /// Reset at the start of each dynamic scan tick.
+  final _knownDeviceComplete = <String, _DeviceDataState>{};
+
+  /// Start a dynamic scan window: scan until every [knownDeviceIds] has
+  /// contributed both temperature AND humidity, or [timeout] elapses,
+  /// whichever comes first. Reports ALL nearby devices and accumulated
+  /// BThome readings on completion.
+  Future<void> startDynamicScan({
+    Duration? timeout,
+    required Set<String> knownDeviceIds,
+  }) async {
+    final actualTimeout = timeout ?? const Duration(seconds: 20);
+    await _runScanWindow(
+      timeout: actualTimeout,
+      knownDeviceIds: knownDeviceIds,
+      dynamicCompletion: true,
+    );
+  }
+
+  /// Shared scan-window implementation.
+  ///
+  /// When [dynamicCompletion] is true and [knownDeviceIds] is non-empty,
+  /// the scan stops as soon as every known device has produced both a
+  /// temperature AND a humidity reading. Otherwise (or when there are no
+  /// known devices), the scan runs for the full [timeout].
   Future<void> _runScanWindow({
     Duration? timeout,
     Set<String>? knownDeviceIds,
+    bool dynamicCompletion = false,
   }) async {
     // If a scan is already in progress, skip this tick rather than
     // interrupting it. Without this guard, a fast Timer (~5s) overlaps
@@ -130,11 +160,13 @@ class BleScanner {
     final scanTimeout = timeout ?? const Duration(seconds: 4);
     final knownIds = knownDeviceIds;
     final hasKnownFilter = knownIds != null && knownIds.isNotEmpty;
+    final useDynamic = dynamicCompletion && hasKnownFilter;
     _scanning = true;
 
     DebugLogger().d(
         'Scan started (timeout: ${scanTimeout.inSeconds}s, '
-        'filterByKnown: $hasKnownFilter)',
+        'filterByKnown: $hasKnownFilter'
+        '${useDynamic ? ", dynamic: true" : ""})',
         tag: 'BleScanner');
 
     // Real-time listener for nearby devices display and BThome accumulation.
@@ -142,6 +174,17 @@ class BleScanner {
     final bthomeReadings = <Reading>[];
     StreamSubscription? rtSub;
     int totalResultsSeen = 0;
+
+    // When dynamic completion is enabled, track per-device state.
+    if (useDynamic) {
+      _knownDeviceComplete.clear();
+      for (final id in knownIds) {
+        _knownDeviceComplete[id] = _DeviceDataState();
+      }
+    }
+
+    final completer = Completer<void>();
+    Timer? safetyTimer;
 
     try {
       rtSub = FlutterBluePlus.scanResults.listen((results) {
@@ -163,7 +206,21 @@ class BleScanner {
               tag: 'BleScanner');
 
           _updateNearby(result, now, nearbyDevices);
-          _accumulateBThome(result, now, bthomeReadings);
+
+          // Accumulate BThome data and, when using dynamic completion,
+          // track which devices have temp/humidity so we can early-stop.
+          final newReadings = <Reading>[];
+          _accumulateBThome(result, now, bthomeReadings,
+              outNewReadings: newReadings);
+          if (useDynamic && newReadings.isNotEmpty) {
+            _updateDeviceCompletionState(newReadings);
+            if (_allDevicesComplete()) {
+              DebugLogger().d(
+                  'All known devices have temp + humidity — stopping scan early',
+                  tag: 'BleScanner');
+              completer.complete();
+            }
+          }
         }
       });
 
@@ -177,19 +234,32 @@ class BleScanner {
       // silently drop our sensors.
       final remoteIds = hasKnownFilter ? knownIds.toList() : <String>[];
       await FlutterBluePlus.startScan(withRemoteIds: remoteIds);
-      await Future.delayed(scanTimeout);
+
+      // Wait for either completion (all devices have temp+humidity) or
+      // timeout. The safety timer prevents the scan from running forever
+      // if a device never sends one of the values.
+      if (useDynamic) {
+        safetyTimer = Timer(scanTimeout, () => completer.complete());
+        await completer.future;
+        safetyTimer.cancel();
+      } else {
+        await Future.delayed(scanTimeout);
+      }
     } finally {
       _scanning = false;
+      safetyTimer?.cancel();
       await rtSub?.cancel();
       try {
         await FlutterBluePlus.stopScan();
       } catch (_) {}
+      _knownDeviceComplete.clear();
     }
 
     DebugLogger().d(
         'Scan finished: $totalResultsSeen results, '
         '${bthomeReadings.length} BThome readings, '
-        '${nearbyDevices.length} unique devices',
+        '${nearbyDevices.length} unique devices'
+        '${useDynamic ? " (dynamic)" : ""}',
         tag: 'BleScanner');
 
     // Also check lastScanResults for any BThome data we might have missed.
@@ -205,6 +275,23 @@ class BleScanner {
     for (final reading in bthomeReadings) {
       onReading?.call(reading);
     }
+  }
+
+  /// Update per-device completion state after new readings arrive.
+  void _updateDeviceCompletionState(List<Reading> newReadings) {
+    for (final reading in newReadings) {
+      final state = _knownDeviceComplete[reading.deviceId];
+      if (state == null) continue;
+      if (reading.temperature != null) state.hasTemperature = true;
+      if (reading.humidity != null) state.hasHumidity = true;
+    }
+  }
+
+  /// Check whether every known device in the current dynamic scan has
+  /// both temperature and humidity.
+  bool _allDevicesComplete() {
+    return _knownDeviceComplete.values
+        .every((state) => state.hasTemperature && state.hasHumidity);
   }
 
   /// Update the nearby-devices list from a scan result (real-time display).
@@ -279,11 +366,16 @@ class BleScanner {
   /// if it succeeds (even with partial temp/humidity), emit immediately.
   /// Falls back to manual extraction for packets the parser rejects
   /// (encrypted, unknown format, etc.).
+  ///
+  /// When [outNewReadings] is provided, newly parsed readings are appended
+  /// to it so callers can track which devices just got temp/humidity data
+  /// (used for dynamic scan window early-stop).
   void _accumulateBThome(
     ScanResult result,
     DateTime now,
-    List<Reading> bthomeReadings,
-  ) {
+    List<Reading> bthomeReadings, {
+    List<Reading>? outNewReadings,
+  }) {
     final deviceId = result.device.remoteId.str;
     final serviceData = result.advertisementData.serviceData;
     final guid = Guid(AppConstants.bthomeServiceUuid);
@@ -300,6 +392,7 @@ class BleScanner {
         rssi: result.rssi,
       );
       bthomeReadings.add(reading);
+      outNewReadings?.add(reading);
       DebugLogger().i(
           'BThome $deviceId: '
           '${reading.temperature?.toStringAsFixed(1) ?? "?"}°C '
@@ -314,7 +407,8 @@ class BleScanner {
     }
 
     // Manual fallback for packets the parser can't handle.
-    _mergePartial(bytes, deviceId, result.rssi, now, bthomeReadings);
+    _mergePartial(bytes, deviceId, result.rssi, now, bthomeReadings,
+        outNewReadings: outNewReadings);
   }
 
   /// Extract temperature/humidity/battery from a partial BThome packet
@@ -327,8 +421,9 @@ class BleScanner {
     String deviceId,
     int rssi,
     DateTime now,
-    List<Reading> bthomeReadings,
-  ) {
+    List<Reading> bthomeReadings, {
+    List<Reading>? outNewReadings,
+  }) {
     if (bytes.isEmpty) return;
 
     final header = bytes[0];
@@ -414,6 +509,7 @@ class BleScanner {
       recordedAt: now.toUtc(),
     );
     bthomeReadings.add(reading);
+    outNewReadings?.add(reading);
     DebugLogger().i(
       'BThome $deviceId: ${temperature?.toStringAsFixed(1) ?? "?"}°C '
       '${humidity?.toStringAsFixed(1) ?? "?"}% (partial)',
@@ -455,4 +551,14 @@ class BleScanner {
   void dispose() {
     _scanResultsController.close();
   }
+}
+
+/// Per-device state for dynamic scan window early-stop.
+///
+/// Tracks whether temperature and/or humidity have been received
+/// for a known device in the current scan tick. When both are true
+/// for every known device, the scan stops early.
+class _DeviceDataState {
+  bool hasTemperature = false;
+  bool hasHumidity = false;
 }

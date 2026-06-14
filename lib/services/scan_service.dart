@@ -182,13 +182,21 @@ class ScanService {
             'Known devices: ${_knownDeviceIds.length}',
             tag: 'ScanService');
 
-        // Scan window (15s) must exceed the sensor's advertising interval
-        // (ATC_PVVX: ~5-10s) so we reliably catch at least one broadcast
-        // even if the first one is missed by a few ms.
-        await _scanner.scan(
-          timeout: const Duration(seconds: 15),
-          knownDeviceIds: _knownDeviceIds.isEmpty ? null : _knownDeviceIds,
-        );
+        // Dynamic scan window: scan until every known device has contributed
+        // both temperature AND humidity. ATC_PVVX sensors advertise at
+        // ~5-10s intervals, so on average this completes in <10s per device.
+        // A 20s safety timeout ensures we never hang forever if a sensor
+        // misses a broadcast cycle.
+        if (_knownDeviceIds.isNotEmpty) {
+          await _scanner.startDynamicScan(
+            timeout: const Duration(seconds: 20),
+            knownDeviceIds: _knownDeviceIds,
+          );
+        } else {
+          // No known devices — nothing to monitor. Run a brief scan just
+          // to keep the BLE stack warm and detect new sensors.
+          await _scanner.scan(timeout: const Duration(seconds: 4));
+        }
       } catch (e) {
         DebugLogger().e('Scan error: $e', tag: 'ScanService');
       }
@@ -223,10 +231,14 @@ class ScanService {
     try {
       final devices = await _repository.getAllDevices();
       _knownDeviceIds = devices.map((d) => d.id).toSet();
-      await _scanner.scan(
-        timeout: const Duration(seconds: 15),
-        knownDeviceIds: _knownDeviceIds.isEmpty ? null : _knownDeviceIds,
-      );
+      if (_knownDeviceIds.isNotEmpty) {
+        await _scanner.startDynamicScan(
+          timeout: const Duration(seconds: 20),
+          knownDeviceIds: _knownDeviceIds,
+        );
+      } else {
+        await _scanner.scan(timeout: const Duration(seconds: 4));
+      }
     } catch (e) {
       DebugLogger().e('refreshNow error: $e', tag: 'ScanService');
     }
