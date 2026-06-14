@@ -46,9 +46,6 @@ class ScanService {
   int _currentIntervalSec = 0;
   ReceivePort? _receivePort;
 
-  /// Tracks the last saved reading per device to avoid writing duplicates.
-  /// Keyed by deviceId; only updated when a new value is actually persisted.
-  final _lastSaved = <String, Reading>{};
 
   /// Cached set of known device IDs, refreshed each scan tick so newly
   /// added devices are picked up without a restart.
@@ -257,28 +254,17 @@ class ScanService {
       return;
     }
 
-    final prev = _lastSaved[reading.deviceId];
-    if (prev == null ||
-        prev.temperature != reading.temperature ||
-        prev.humidity != reading.humidity ||
-        prev.battery != reading.battery) {
-      _lastSaved[reading.deviceId] = reading;
-      DebugLogger().i(
-          'Persist ${reading.deviceId}: '
-          '${reading.temperature?.toStringAsFixed(1) ?? "?"}°C '
-          '${reading.humidity?.toStringAsFixed(1) ?? "?"}% '
-          'batt=${reading.battery ?? "?"}',
-          tag: 'ScanService');
-      _repository.saveReading(reading).catchError((e) {
-        DebugLogger().e('Failed to persist reading: $e', tag: 'ScanService');
-      });
-    } else {
-      DebugLogger().v(
-          'Skip save (unchanged) ${reading.deviceId}: '
-          '${reading.temperature?.toStringAsFixed(1) ?? "?"}°C '
-          '${reading.humidity?.toStringAsFixed(1) ?? "?"}%',
-          tag: 'ScanService');
-    }
+    // Always persist every reading to DB so the history chart shows
+    // continuous data even when the sensor value hasn't changed.
+    DebugLogger().i(
+        'Persist ${reading.deviceId}: '
+        '${reading.temperature?.toStringAsFixed(1) ?? "?"}°C '
+        '${reading.humidity?.toStringAsFixed(1) ?? "?"}% '
+        'batt=${reading.battery ?? "?"}',
+        tag: 'ScanService');
+    _repository.saveReading(reading).catchError((e) {
+      DebugLogger().e('Failed to persist reading: $e', tag: 'ScanService');
+    });
 
     _controller.add(reading);
 
