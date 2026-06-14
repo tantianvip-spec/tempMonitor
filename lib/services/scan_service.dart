@@ -200,6 +200,25 @@ class ScanService {
     start();
   }
 
+  /// Trigger an immediate monitoring scan for known devices.
+  /// Used by the manual refresh button / pull-to-refresh on the device list.
+  Future<void> refreshNow() async {
+    if (_settings.getMockDeviceEnabled()) return;
+    DebugLogger().i(
+        'refreshNow() — immediate monitoring scan',
+        tag: 'ScanService');
+    try {
+      final devices = await _repository.getAllDevices();
+      _knownDeviceIds = devices.map((d) => d.id).toSet();
+      await _scanner.scan(
+        timeout: const Duration(seconds: 4),
+        knownDeviceIds: _knownDeviceIds.isEmpty ? null : _knownDeviceIds,
+      );
+    } catch (e) {
+      DebugLogger().e('refreshNow error: $e', tag: 'ScanService');
+    }
+  }
+
   Future<void> scanNow() async {
     if (_settings.getMockDeviceEnabled()) return;
     DebugLogger().i(

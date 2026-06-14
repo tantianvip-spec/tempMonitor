@@ -16,7 +16,6 @@ import 'package:temp_monitor/presentation/dashboard/dashboard_cubit.dart';
 import 'package:temp_monitor/presentation/dashboard/dashboard_page.dart';
 import 'package:temp_monitor/repositories/sensor_repository.dart';
 import 'package:temp_monitor/services/scan_service.dart';
-import 'package:temp_monitor/services/settings_service.dart';
 
 class DevicesPage extends StatefulWidget {
   const DevicesPage({super.key});
@@ -100,6 +99,11 @@ class _DevicesPageState extends State<DevicesPage> {
             tooltip: '扫描附近设备',
             onPressed: () => _scaffoldKey.currentState?.openDrawer(),
           ),
+          IconButton(
+            icon: Icon(PhosphorIcons.arrowClockwise()),
+            tooltip: '刷新数据',
+            onPressed: () => context.read<ScanService>().refreshNow(),
+          ),
         ],
       ),
       drawer: _ScanDrawer(
@@ -115,23 +119,25 @@ class _DevicesPageState extends State<DevicesPage> {
 
           if (savedDevices.isEmpty) {
             return _EmptyState(
-              scanService: context.read<ScanService>(),
               onScanTap: () => _scaffoldKey.currentState?.openDrawer(),
             );
           }
 
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            children: [
-              ...savedDevices.map((device) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _DeviceCard(
-                      device: device,
-                      onTap: () =>
-                          _openDashboard(context, repository, device),
-                    ),
-              )),
-            ],
+          return RefreshIndicator(
+            onRefresh: () => context.read<ScanService>().refreshNow(),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              children: [
+                ...savedDevices.map((device) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _DeviceCard(
+                        device: device,
+                        onTap: () =>
+                            _openDashboard(context, repository, device),
+                      ),
+                )),
+              ],
+            ),
           );
         },
       ),
@@ -558,17 +564,14 @@ class _DeviceCard extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  final ScanService scanService;
   final VoidCallback onScanTap;
 
   const _EmptyState({
-    required this.scanService,
     required this.onScanTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final mockMode = context.read<SettingsService>().getMockDeviceEnabled();
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -576,15 +579,13 @@ class _EmptyState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              mockMode
-                  ? PhosphorIcons.wrench()
-                  : PhosphorIcons.bluetoothConnected(),
+              PhosphorIcons.bluetoothConnected(),
               size: 64,
               color: AppTheme.textMuted(context),
             ),
             const SizedBox(height: 16),
             Text(
-              mockMode ? '模拟设备模式已开启' : '未发现设备',
+              '未发现设备',
               style: TextStyle(
                 color: AppTheme.textSecondary(context),
                 fontSize: 16,
@@ -593,24 +594,15 @@ class _EmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              mockMode
-                  ? '等待模拟数据生成中…\n如果长时间无数据，请检查"设置"页面'
-                  : '请添加蓝牙温湿度传感器',
+              '请添加蓝牙温湿度传感器',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppTheme.textMuted(context), fontSize: 13),
             ),
-            if (!mockMode) ...[
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: onScanTap,
-                icon: const Icon(Icons.bluetooth_searching, size: 18),
-                label: const Text('扫描附近设备'),
-              ),
-            ],
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: () => scanService.restart(),
-              child: Text('重新启动扫描', style: TextStyle(color: AppTheme.textMuted(context))),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: onScanTap,
+              icon: const Icon(Icons.bluetooth_searching, size: 18),
+              label: const Text('扫描附近设备'),
             ),
           ],
         ),
