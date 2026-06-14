@@ -133,30 +133,48 @@ void main() {
       expect(result.humidity, closeTo(60.00, 0.01));
     });
 
-    test('extracts temperature from ATC non-standard 0x0C object', () {
+    test('rejects ATC 0x0C-only packet (no standard temp/humidity)', () {
       // Real ATC_PVVX packet from A4:C1:38:3F:B9:8D:
-      //   40 00 d2 0c 9d 0b 10 00 11 01
+      //   40 00 6e 0c 9e 0b 10 00 11 01
       // 0x40 = header
-      // 0x00 0xd2 = packet_id = 210
-      // 0x0C 0x9d 0x0b 0x10 = ATC non-standard temp + humidity
-      //   int16 LE 0x0b9d = 2973 → 29.73°C
-      //   0x10 = 16% humidity (uint8, third byte of 0x0C object)
+      // 0x00 0x6e = packet_id
+      // 0x0C 0x9e 0x0b 0x10 = illuminance (uint24 LE = 0x100b9e lx)
       // 0x00 0x11 = packet_id (second occurrence)
       // 0x01 = battery 1%
       //
-      // Note: battery (at the end) isn't captured because the parser
-      // exits the loop once both temp and humidity are found.
+      // This packet has no standard 0x02/0x03 temp/humidity objects,
+      // so it must be rejected as a lifecycle-only packet.
       final bytes = [
         0x40,
-        0x00, 0xD2, // packet_id = 210
-        0x0C, 0x9D, 0x0B, 0x10, // ATC temp=29.73°C, humidity=16%
+        0x00, 0x6E, // packet_id = 110
+        0x0C, 0x9E, 0x0B, 0x10, // illuminance only
+      ];
+
+      expect(
+        () => BThomeParser.parse(bytes, deviceId: deviceId, rssi: rssi),
+        throwsA(isA<BThomeParseException>()),
+      );
+    });
+
+    test('parses standard-format 25.5C / 80.8% (real ATC sensor data)', () {
+      // Real ATC_PVVX standard-format packet:
+      //   40 00 01 02 f5 09 03 8b 1f
+      // 0x40 = header
+      // 0x00 0x01 = packet_id = 1
+      // 0x02 0xf5 0x09 = temperature int16 LE 0x09F5 = 2549 -> 25.49C
+      // 0x03 0x8b 0x1f = humidity uint16 LE 0x1F8B = 8075 -> 80.75%
+      final bytes = [
+        0x40,
+        0x00, 0x01, // packet_id = 1
+        0x02, 0xF5, 0x09, // temp 25.41C
+        0x03, 0x8B, 0x1F, // humidity 80.75%
       ];
 
       final result =
           BThomeParser.parse(bytes, deviceId: deviceId, rssi: rssi);
 
-      expect(result.temperature, closeTo(29.73, 0.01));
-      expect(result.humidity, closeTo(16.0, 0.01));
+      expect(result.temperature, closeTo(25.49, 0.01));
+      expect(result.humidity, closeTo(80.75, 0.01));
     });
   });
 }
