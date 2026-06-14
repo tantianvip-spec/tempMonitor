@@ -21,6 +21,11 @@ class SensorRepository {
     return query.watch().map((rows) => rows.map(_mapDevice).toList());
   }
 
+  Future<List<domain.Device>> getAllDevices() async {
+    final rows = await _db.select(_db.devices).get();
+    return rows.map(_mapDevice).toList();
+  }
+
   Future<void> saveReading(domain.Reading reading) async {
     final existing = await _db.devicesDao.getDeviceById(reading.deviceId);
     await _db.devicesDao.upsertDevice(

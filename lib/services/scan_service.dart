@@ -50,6 +50,10 @@ class ScanService {
   /// Keyed by deviceId; only updated when a new value is actually persisted.
   final _lastSaved = <String, Reading>{};
 
+  /// Cached set of known device IDs, refreshed each scan tick so newly
+  /// added devices are picked up without a restart.
+  Set<String> _knownDeviceIds = {};
+
   /// Broadcast stream that any consumer (DashboardCubit, etc.) can listen to.
   Stream<Reading> get readingStream => _controller.stream;
 
@@ -161,7 +165,18 @@ class ScanService {
     _scanTimer = Timer.periodic(interval, (_) async {
       DebugLogger().d('Scan tick starting', tag: 'ScanService');
       try {
-        await _scanner.scan(timeout: const Duration(seconds: 4));
+        // Refresh known device IDs each tick so newly added devices are
+        // picked up immediately without a service restart.
+        final devices = await _repository.getAllDevices();
+        _knownDeviceIds = devices.map((d) => d.id).toSet();
+        DebugLogger().v(
+            'Known devices: ${_knownDeviceIds.length}',
+            tag: 'ScanService');
+
+        await _scanner.scan(
+          timeout: const Duration(seconds: 4),
+          knownDeviceIds: _knownDeviceIds.isEmpty ? null : _knownDeviceIds,
+        );
       } catch (e) {
         DebugLogger().e('Scan error: $e', tag: 'ScanService');
       }
@@ -191,6 +206,9 @@ class ScanService {
         'scanNow() — immediate on-demand BLE scan',
         tag: 'ScanService');
     try {
+      // On-demand scans (from the device discovery drawer) should show
+      // ALL BThome devices, not just already-known ones. But we still
+      // filter by BThome service UUID at the OS level for efficiency.
       await _scanner.scan(timeout: const Duration(seconds: 4));
     } catch (e) {
       DebugLogger().e('scanNow error: $e', tag: 'ScanService');

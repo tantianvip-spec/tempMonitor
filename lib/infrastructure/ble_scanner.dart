@@ -66,7 +66,17 @@ class BleScanner {
 
   /// Run one scan window of [duration]. Emits [ScanResultBundle] to
   /// [scanResults] when done.
-  Future<void> scan({Duration? timeout}) async {
+  ///
+  /// When [knownDeviceIds] is provided and non-empty, scan results that don't
+  /// match a known device ID are filtered out. This avoids emitting readings
+  /// for sensors the user hasn't added yet.
+  ///
+  /// The scan always filters by [AppConstants.bthomeServiceUuid] at the OS
+  /// level via [FlutterBluePlus.startScan]'s `withServices` parameter, so
+  /// only BThome-compatible devices trigger callbacks — non-BLE-thermometer
+  /// devices (soundbars, lights, etc.) are never reported by the Bluetooth
+  /// controller.
+  Future<void> scan({Duration? timeout, Set<String>? knownDeviceIds}) async {
     // If a scan is already in progress, skip this tick rather than
     // interrupting it. Without this guard, a fast Timer (~5s) overlaps
     // with the scan window (~4s scan + ~1s buffer = ~5s total), causing
@@ -97,9 +107,13 @@ class BleScanner {
     }
 
     final scanTimeout = timeout ?? const Duration(seconds: 4);
+    final knownIds = knownDeviceIds;
+    final hasKnownFilter = knownIds != null && knownIds.isNotEmpty;
     _scanning = true;
 
-    DebugLogger().d('Scan started (timeout: ${scanTimeout.inSeconds}s)',
+    DebugLogger().d(
+        'Scan started (timeout: ${scanTimeout.inSeconds}s, '
+        'filterByKnown: $hasKnownFilter)',
         tag: 'BleScanner');
 
     // Real-time listener for nearby devices display and BThome accumulation.
@@ -107,6 +121,7 @@ class BleScanner {
     final bthomeReadings = <Reading>[];
     StreamSubscription? rtSub;
     int totalResultsSeen = 0;
+    int filteredResults = 0;
 
     try {
       rtSub = FlutterBluePlus.scanResults.listen((results) {
@@ -114,6 +129,15 @@ class BleScanner {
         totalResultsSeen += results.length;
         for (final result in results) {
           final deviceId = result.device.remoteId.str;
+
+          // When we know which devices we care about, skip everything else.
+          // This avoids processing hundreds of irrelevant scan results
+          // every tick.
+          if (hasKnownFilter && !knownIds.contains(deviceId)) {
+            filteredResults++;
+            continue;
+          }
+
           final rssi = result.rssi;
           final name = result.device.advName.isNotEmpty
               ? result.device.advName
@@ -132,9 +156,12 @@ class BleScanner {
         }
       });
 
-      // Start scan without timeout parameter — it returns immediately.
-      // We use Future.delayed to control the scan window duration.
-      await FlutterBluePlus.startScan();
+      // Start scan filtering by BThome service UUID at the OS level, so
+      // the Bluetooth controller only reports advertisements that contain
+      // the BThome service data. This is far more efficient than receiving
+      // every BLE advertisement and filtering in Dart code.
+      final bthomeGuid = Guid(AppConstants.bthomeServiceUuid);
+      await FlutterBluePlus.startScan(withServices: [bthomeGuid]);
       await Future.delayed(scanTimeout);
     } finally {
       _scanning = false;
@@ -146,12 +173,16 @@ class BleScanner {
 
     DebugLogger().d(
         'Scan finished: $totalResultsSeen results, '
+        '$filteredResults filtered (knownIds=$hasKnownFilter), '
         '${bthomeReadings.length} BThome readings, '
         '${nearbyDevices.length} unique devices',
         tag: 'BleScanner');
 
     // Also check lastScanResults for any BThome data we might have missed.
     for (final result in FlutterBluePlus.lastScanResults) {
+      if (hasKnownFilter && !knownIds.contains(result.device.remoteId.str)) {
+        continue;
+      }
       _parseBThome(result, DateTime.now(), bthomeReadings);
     }
 
