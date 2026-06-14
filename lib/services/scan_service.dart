@@ -42,6 +42,11 @@ class ScanService {
   int _currentIntervalSec = 0;
   ReceivePort? _receivePort;
 
+  /// When true, the background service handles BLE scanning and DB persistence.
+  /// The main isolate only forwards readings to UI and evaluates thresholds.
+  /// When false, the main isolate does everything (fallback mode).
+  bool _backgroundMode = false;
+
   /// Tracks the last saved reading per device to avoid writing duplicates.
   /// Keyed by deviceId; only updated when a new value is actually persisted.
   final _lastSaved = <String, Reading>{};
@@ -100,6 +105,7 @@ class ScanService {
 
     if (_currentMockMode) {
       // Mock mode runs in the main isolate — no BLE scanning needed.
+      _backgroundMode = false;
       final interval = Duration(seconds: _currentIntervalSec);
       DebugLogger().i('Starting mock sensor stream', tag: 'ScanService');
       _mockSubscription = _mockSensor
@@ -115,12 +121,17 @@ class ScanService {
     _receivePort!.listen((message) {
       if (message is Reading) {
         _handleReading(message);
+      } else if (message == null) {
+        // Heartbeat from background service — confirm it's alive.
+        DebugLogger().v('Background service heartbeat', tag: 'ScanService');
       }
     });
 
-    // If the background service is available, it handles all BLE scanning.
-    // The main isolate only receives and processes readings.
+    // If the background service is available, it handles all BLE scanning
+    // AND DB persistence. The main isolate only forwards readings to UI
+    // and evaluates thresholds for notifications.
     if (BackgroundService.isAvailable) {
+      _backgroundMode = true;
       DebugLogger().i('Using background service for BLE scanning',
           tag: 'ScanService');
       BackgroundService.start();
@@ -128,6 +139,7 @@ class ScanService {
     }
 
     // Fallback: background service not available — scan from main isolate.
+    _backgroundMode = false;
     DebugLogger().i('Background service unavailable, using main-isolate BLE scanner',
         tag: 'ScanService');
     _startMainIsolateTimer();
@@ -198,21 +210,27 @@ class ScanService {
     // Skip persisting when the value is identical to the last saved one.
     // BLE sensors broadcast every ~200ms during a scan window — without
     // dedup a single 10s window writes dozens of identical rows to the DB.
+    //
+    // In background mode, the background isolate already persists readings
+    // to DB — the main isolate only saves when running its own fallback
+    // scanner.
     final prev = _lastSaved[reading.deviceId];
-    if (prev == null ||
-        prev.temperature != reading.temperature ||
-        prev.humidity != reading.humidity ||
-        prev.battery != reading.battery) {
-      _lastSaved[reading.deviceId] = reading;
-      _repository.saveReading(reading).catchError((e) {
-        DebugLogger().e('Failed to persist reading: $e', tag: 'ScanService');
-      });
-    } else {
-      DebugLogger().v(
-          'Skip save (unchanged) ${reading.deviceId}: '
-          '${reading.temperature?.toStringAsFixed(1) ?? "?"}°C '
-          '${reading.humidity?.toStringAsFixed(1) ?? "?"}%',
-          tag: 'ScanService');
+    if (!_backgroundMode) {
+      if (prev == null ||
+          prev.temperature != reading.temperature ||
+          prev.humidity != reading.humidity ||
+          prev.battery != reading.battery) {
+        _lastSaved[reading.deviceId] = reading;
+        _repository.saveReading(reading).catchError((e) {
+          DebugLogger().e('Failed to persist reading: $e', tag: 'ScanService');
+        });
+      } else {
+        DebugLogger().v(
+            'Skip save (unchanged) ${reading.deviceId}: '
+            '${reading.temperature?.toStringAsFixed(1) ?? "?"}°C '
+            '${reading.humidity?.toStringAsFixed(1) ?? "?"}%',
+            tag: 'ScanService');
+      }
     }
 
     _controller.add(reading);

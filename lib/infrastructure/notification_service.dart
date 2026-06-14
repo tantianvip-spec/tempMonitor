@@ -13,6 +13,18 @@ class NotificationService {
 
   bool _initialized = false;
 
+  /// Callback invoked when the user taps a notification.
+  /// Brings the app to the foreground (Android default, but explicit handling
+  /// ensures it works across devices).
+  void _onNotificationTap(NotificationResponse response) {
+    // No action needed beyond bringing the app to foreground, which
+    // flutter_local_notifications handles by default on Android.
+    DebugLogger().i(
+      'Notification tapped: ${response.notificationResponseType}',
+      tag: 'Notification',
+    );
+  }
+
   Future<void> initialize() async {
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
@@ -25,7 +37,10 @@ class NotificationService {
       iOS: iosSettings,
     );
 
-    await _notifications.initialize(initSettings);
+    await _notifications.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: _onNotificationTap,
+    );
 
     // Android 8+ requires channels to exist before posting a notification.
     // Lazy creation on first `show()` works in practice but races with
@@ -73,6 +88,7 @@ class NotificationService {
       title,
       body,
       details,
+      payload: 'open_app',
     );
     DebugLogger().i('Notification shown: $title - $body', tag: 'Notification');
   }

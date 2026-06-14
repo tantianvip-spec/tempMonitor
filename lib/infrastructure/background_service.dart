@@ -7,11 +7,9 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:temp_monitor/core/constants.dart';
 import 'package:temp_monitor/data/app_database.dart' hide Reading;
 import 'package:temp_monitor/domain/models/reading.dart';
-import 'package:temp_monitor/domain/services/threshold_engine.dart';
 import 'package:temp_monitor/infrastructure/ble_scanner.dart';
 import 'package:temp_monitor/infrastructure/debug_logger.dart';
 import 'package:temp_monitor/infrastructure/mock_sensor.dart';
-import 'package:temp_monitor/infrastructure/notification_service.dart';
 import 'package:temp_monitor/repositories/sensor_repository.dart';
 import 'package:temp_monitor/services/settings_service.dart';
 
@@ -114,26 +112,12 @@ class BackgroundService {
       final scanner = BleScanner();
       final mockSensor = MockSensor();
 
-      // Note: NotificationService uses flutter_local_notifications which
-      // requires the main isolate's platform channels. In the background
-      // isolate it may not work on all devices, so wrap in try-catch.
-      NotificationService? notifications;
-      try {
-        notifications = NotificationService();
-        await notifications.initialize();
-      } catch (e) {
-        DebugLogger().w('Background notifications unavailable: $e',
-            tag: 'BackgroundService');
-      }
-
-      ThresholdEngine createEngine() => ThresholdEngine(
-            tempMin: settings.getTempMin(),
-            tempMax: settings.getTempMax(),
-            humidityMin: settings.getHumidityMin(),
-            humidityMax: settings.getHumidityMax(),
-          );
-
-      var thresholdEngine = createEngine();
+      // Notifications and threshold evaluation are handled by the main
+      // isolate's _handleReading, which receives readings via uiPort.
+      // Notifications from the background isolate are skipped because
+      // flutter_local_notifications platform channels don't work reliably
+      // in the background isolate — tapping such notifications may not
+      // bring the app to foreground.
 
       // The UI isolate registers a ReceivePort under this name when it starts.
       // Look it up each tick so a UI hot-restart (which re-registers) is picked up.
@@ -178,38 +162,8 @@ class BackgroundService {
             IsolateNameServer.lookupPortByName(AppConstants.uiIsolatePortName);
         uiPort?.send(reading);
 
-        final state = thresholdEngine.evaluate(
-          temperature: reading.temperature,
-          humidity: reading.humidity,
-        );
-
-        if (notifications != null) {
-          if (state.justBecameBreached) {
-            try {
-              await notifications.showAlert(
-                title: '温湿度告警',
-                body:
-                    '温度 ${reading.temperature?.toStringAsFixed(1) ?? "?"}°C / '
-                    '湿度 ${reading.humidity?.toStringAsFixed(1) ?? "?"}% 超出设定范围',
-              );
-            } catch (e) {
-              DebugLogger().e('Background notify error: $e',
-                  tag: 'BackgroundService');
-            }
-          } else if (state.justRecovered) {
-            try {
-              await notifications.showAlert(
-                title: '温湿度已恢复',
-                body:
-                    '温度 ${reading.temperature?.toStringAsFixed(1) ?? "?"}°C / '
-                    '湿度 ${reading.humidity?.toStringAsFixed(1) ?? "?"}% 已回到正常范围',
-              );
-            } catch (e) {
-              DebugLogger().e('Background notify error: $e',
-                  tag: 'BackgroundService');
-            }
-          }
-        }
+        // Threshold evaluation and notifications are handled by the main
+        // isolate's _handleReading, which receives readings via uiPort.
       }
 
       Timer? scanTimer;
@@ -244,9 +198,18 @@ class BackgroundService {
 
         DebugLogger().i('Background BLE scanning started',
             tag: 'BackgroundService');
+        // Send a heartbeat to the main isolate every tick so we can confirm
+        // the background service is alive even when no readings change.
         scanTimer = Timer.periodic(interval, (_) async {
           try {
             await scanner.scan(timeout: const Duration(seconds: 4));
+            // Heartbeat: send a null reading so the main isolate knows
+            // the background service is still running.
+            uiPort ??=
+                IsolateNameServer.lookupPortByName(AppConstants.uiIsolatePortName);
+            if (uiPort != null) {
+              uiPort!.send(null);
+            }
           } catch (e) {
             DebugLogger()
                 .e('Background scan error: $e', tag: 'BackgroundService');
@@ -268,7 +231,6 @@ class BackgroundService {
       });
 
       service.on('updateSettings').listen((event) {
-        thresholdEngine = createEngine();
         startScanning();
       });
 
