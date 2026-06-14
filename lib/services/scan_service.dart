@@ -203,13 +203,12 @@ class ScanService {
   Future<void> scanNow() async {
     if (_settings.getMockDeviceEnabled()) return;
     DebugLogger().i(
-        'scanNow() — immediate on-demand BLE scan',
+        'scanNow() — immediate on-demand BLE scan (discovery mode)',
         tag: 'ScanService');
     try {
-      // On-demand scans (from the device discovery drawer) should show
-      // ALL BThome devices, not just already-known ones. But we still
-      // filter by BThome service UUID at the OS level for efficiency.
-      await _scanner.scan(timeout: const Duration(seconds: 4));
+      // On-demand scans for device discovery: show ALL BLE devices,
+      // not just already-known ones.
+      await _scanner.scanForDiscovery(timeout: const Duration(seconds: 4));
     } catch (e) {
       DebugLogger().e('scanNow error: $e', tag: 'ScanService');
     }

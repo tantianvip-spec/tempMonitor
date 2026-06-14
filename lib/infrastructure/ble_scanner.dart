@@ -76,7 +76,28 @@ class BleScanner {
   /// only BThome-compatible devices trigger callbacks — non-BLE-thermometer
   /// devices (soundbars, lights, etc.) are never reported by the Bluetooth
   /// controller.
+  /// Run a scan window for device discovery. Reports ALL nearby devices
+  /// (not just known ones), used by the scan drawer to find new sensors.
+  Future<void> scanForDiscovery({Duration? timeout}) async {
+    await _runScanWindow(
+      timeout: timeout,
+      knownDeviceIds: null,
+    );
+  }
+
+  /// Run one scan window for normal monitoring. When [knownDeviceIds] is
+  /// provided and non-empty, results that don't match are filtered out.
   Future<void> scan({Duration? timeout, Set<String>? knownDeviceIds}) async {
+    await _runScanWindow(
+      timeout: timeout,
+      knownDeviceIds: knownDeviceIds,
+    );
+  }
+
+  Future<void> _runScanWindow({
+    Duration? timeout,
+    Set<String>? knownDeviceIds,
+  }) async {
     // If a scan is already in progress, skip this tick rather than
     // interrupting it. Without this guard, a fast Timer (~5s) overlaps
     // with the scan window (~4s scan + ~1s buffer = ~5s total), causing
@@ -156,12 +177,14 @@ class BleScanner {
         }
       });
 
-      // Start scan filtering by BThome service UUID at the OS level, so
-      // the Bluetooth controller only reports advertisements that contain
-      // the BThome service data. This is far more efficient than receiving
-      // every BLE advertisement and filtering in Dart code.
-      final bthomeGuid = Guid(AppConstants.bthomeServiceUuid);
-      await FlutterBluePlus.startScan(withServices: [bthomeGuid]);
+      // Start scan. We do NOT use withServices here because ATC_PVVX
+      // sensors include the BThome UUID only in the serviceData map of the
+      // advertisement, not in the advertised service UUIDs list. The
+      // withServices parameter filters on the latter, which would silently
+      // drop all our sensors at the OS level.
+      // Instead, we filter at the application layer: BThome data check
+      // (for discovery) and knownDeviceIds (for normal monitoring).
+      await FlutterBluePlus.startScan();
       await Future.delayed(scanTimeout);
     } finally {
       _scanning = false;
