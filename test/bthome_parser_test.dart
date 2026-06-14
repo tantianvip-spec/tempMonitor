@@ -132,5 +132,31 @@ void main() {
       expect(result.temperature, closeTo(25.00, 0.01));
       expect(result.humidity, closeTo(60.00, 0.01));
     });
+
+    test('extracts temperature from ATC non-standard 0x0C object', () {
+      // Real ATC_PVVX packet from A4:C1:38:3F:B9:8D:
+      //   40 00 d2 0c 9d 0b 10 00 11 01
+      // 0x40 = header
+      // 0x00 0xd2 = packet_id = 210
+      // 0x0C 0x9d 0x0b 0x10 = ATC non-standard temp + humidity
+      //   int16 LE 0x0b9d = 2973 → 29.73°C
+      //   0x10 = 16% humidity (uint8, third byte of 0x0C object)
+      // 0x00 0x11 = packet_id (second occurrence)
+      // 0x01 = battery 1%
+      //
+      // Note: battery (at the end) isn't captured because the parser
+      // exits the loop once both temp and humidity are found.
+      final bytes = [
+        0x40,
+        0x00, 0xD2, // packet_id = 210
+        0x0C, 0x9D, 0x0B, 0x10, // ATC temp=29.73°C, humidity=16%
+      ];
+
+      final result =
+          BThomeParser.parse(bytes, deviceId: deviceId, rssi: rssi);
+
+      expect(result.temperature, closeTo(29.73, 0.01));
+      expect(result.humidity, closeTo(16.0, 0.01));
+    });
   });
 }

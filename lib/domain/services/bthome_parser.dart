@@ -150,6 +150,35 @@ class BThomeParser {
             throw BThomeParseException(
                 'Unknown object id: 0x${objectId.toRadixString(16)}');
           }
+
+          // ATC_PVVX firmware sometimes encodes temperature in object 0x0C
+          // (standard BThome: illuminance uint24). The first 2 bytes of the
+          // 3-byte value carry temperature as sint16 LE (°C/100), and the
+          // third byte is a custom flag — some ATC firmware versions also
+          // encode humidity as this byte (uint8 %).
+          if (objectId == 0x0C && dataLen == 3 && temperature == null &&
+              offset + 1 < bytes.length) {
+            final candidate = byteData.getInt16(offset, Endian.little) / 100;
+            if (candidate >= _minTemp && candidate <= _maxTemp) {
+              temperature = candidate;
+              DebugLogger().v(
+                  'Extracted temperature from ATC 0x0C object: $candidate',
+                  tag: 'BThomeParser');
+              // Try third byte as humidity (uint8 %), some ATC firmware
+              // encodes it here.
+              if (humidity == null && offset + 2 < bytes.length) {
+                final humCandidate = bytes[offset + 2].toDouble();
+                if (humCandidate >= _minHumidity &&
+                    humCandidate <= _maxHumidity) {
+                  humidity = humCandidate;
+                  DebugLogger().v(
+                      'Extracted humidity from ATC 0x0C byte 2: $humCandidate',
+                      tag: 'BThomeParser');
+                }
+              }
+            }
+          }
+
           // For variable-length IDs (≥0x80), the length byte itself
           // sits at bytes[offset] and is 1 byte; skip it too.
           offset += dataLen;

@@ -173,8 +173,10 @@ class ScanService {
             'Known devices: ${_knownDeviceIds.length}',
             tag: 'ScanService');
 
+        // Scan window must exceed the sensor's advertising interval
+        // (ATC_PVVX: ~5-10s) so we reliably catch at least one broadcast.
         await _scanner.scan(
-          timeout: const Duration(seconds: 4),
+          timeout: const Duration(seconds: 10),
           knownDeviceIds: _knownDeviceIds.isEmpty ? null : _knownDeviceIds,
         );
       } catch (e) {
@@ -211,7 +213,7 @@ class ScanService {
       final devices = await _repository.getAllDevices();
       _knownDeviceIds = devices.map((d) => d.id).toSet();
       await _scanner.scan(
-        timeout: const Duration(seconds: 4),
+        timeout: const Duration(seconds: 10),
         knownDeviceIds: _knownDeviceIds.isEmpty ? null : _knownDeviceIds,
       );
     } catch (e) {
@@ -226,7 +228,7 @@ class ScanService {
         tag: 'ScanService');
     try {
       // On-demand scans for device discovery: show ALL BLE devices,
-      // not just already-known ones.
+      // not just already-known ones. Keep this short — user is waiting.
       await _scanner.scanForDiscovery(timeout: const Duration(seconds: 4));
     } catch (e) {
       DebugLogger().e('scanNow error: $e', tag: 'ScanService');
