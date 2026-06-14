@@ -5,19 +5,16 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:temp_monitor/core/constants.dart';
-import 'package:temp_monitor/data/app_database.dart' hide Reading;
-import 'package:temp_monitor/domain/models/reading.dart';
-import 'package:temp_monitor/infrastructure/ble_scanner.dart';
 import 'package:temp_monitor/infrastructure/debug_logger.dart';
-import 'package:temp_monitor/infrastructure/mock_sensor.dart';
-import 'package:temp_monitor/repositories/sensor_repository.dart';
-import 'package:temp_monitor/services/settings_service.dart';
 
-/// Manages a persistent foreground service that keeps BLE scanning alive
-/// even when the app is backgrounded.
+/// Manages a persistent foreground service that keeps the Android process
+/// alive so the main isolate's BLE scanning Timer continues to fire even
+/// when the app is backgrounded.
 ///
-/// The service runs in its own Dart isolate. Readings are sent to the UI
-/// isolate via [IsolateNameServer] under [AppConstants.uiIsolatePortName].
+/// This service runs in its own Dart isolate but does NOT perform any BLE
+/// scanning — all scanning happens in the main isolate via [ScanService].
+/// The background isolate only sends periodic heartbeats (`null` messages)
+/// to the main isolate to confirm the process is alive.
 class BackgroundService {
   static const int _notificationId = 888;
   static bool _configured = false;
@@ -95,7 +92,8 @@ class BackgroundService {
     try {
       DartPluginRegistrant.ensureInitialized();
 
-      // Ensure Android foreground service notification is shown.
+      // Show the foreground service notification so Android keeps the
+      // process alive.
       if (service is AndroidServiceInstance) {
         service.setForegroundNotificationInfo(
           title: '温湿度监控',
@@ -104,137 +102,62 @@ class BackgroundService {
         await service.setAsForegroundService();
       }
 
-      final settings = SettingsService();
-      await settings.initialize();
+      DebugLogger().i(
+          'Background service started — process keepalive only, '
+          'BLE scanning runs in main isolate',
+          tag: 'BackgroundService');
 
-      final db = AppDatabase();
-      final repository = SensorRepository(db);
-      final scanner = BleScanner();
-      final mockSensor = MockSensor();
-
-      // Notifications and threshold evaluation are handled by the main
-      // isolate's _handleReading, which receives readings via uiPort.
-      // Notifications from the background isolate are skipped because
-      // flutter_local_notifications platform channels don't work reliably
-      // in the background isolate — tapping such notifications may not
-      // bring the app to foreground.
-
-      // The UI isolate registers a ReceivePort under this name when it starts.
-      // Look it up each tick so a UI hot-restart (which re-registers) is picked up.
+      // The UI isolate registers a ReceivePort under this name when it
+      // starts. Look it up each tick so a UI hot-restart (which
+      // re-registers) is picked up.
       SendPort? uiPort;
 
-      // Tracks the last saved reading per device to avoid duplicates.
-      final lastSaved = <String, Reading>{};
+      // Send a heartbeat every 5 minutes to confirm the process is alive.
+      // The heartbeat interval is fixed (not tied to the scan interval)
+      // because this is purely a process-liveness signal.
+      const heartbeatInterval = Duration(seconds: 300);
+      Timer? heartbeatTimer;
 
-      /// Process a single Reading: persist, push to UI, fire alert if breached.
-      Future<void> handleReading(Reading reading) async {
-        // Skip readings that carry no temperature or humidity data (e.g.
-        // battery-only lifecycle packets from ATC sensors).
-        if (reading.temperature == null && reading.humidity == null) {
-          DebugLogger().v(
-              'Skip save (no temp/humidity) ${reading.deviceId}',
-              tag: 'BackgroundService');
-          return;
-        }
-
-        // Dedup: only persist when a value actually changed.
-        final prev = lastSaved[reading.deviceId];
-        if (prev == null ||
-            prev.temperature != reading.temperature ||
-            prev.humidity != reading.humidity ||
-            prev.battery != reading.battery) {
-          lastSaved[reading.deviceId] = reading;
-          try {
-            await repository.saveReading(reading);
-          } catch (e) {
-            DebugLogger()
-                .e('Background save error: $e', tag: 'BackgroundService');
-          }
-        } else {
-          DebugLogger().v(
-              'Skip save (unchanged) ${reading.deviceId}: '
-              '${reading.temperature?.toStringAsFixed(1) ?? "?"}°C '
-              '${reading.humidity?.toStringAsFixed(1) ?? "?"}%',
-              tag: 'BackgroundService');
-        }
-
-        uiPort ??=
-            IsolateNameServer.lookupPortByName(AppConstants.uiIsolatePortName);
-        uiPort?.send(reading);
-
-        // Threshold evaluation and notifications are handled by the main
-        // isolate's _handleReading, which receives readings via uiPort.
-      }
-
-      Timer? scanTimer;
-      StreamSubscription<Reading>? mockSubscription;
-
-      void cancelAll() {
-        scanTimer?.cancel();
-        scanTimer = null;
-        mockSubscription?.cancel();
-        mockSubscription = null;
-      }
-
-      void startScanning() {
-        cancelAll();
-        final interval = Duration(seconds: settings.getScanIntervalSeconds());
-
-        if (settings.getMockDeviceEnabled()) {
-          DebugLogger().i('Background mock sensor started',
-              tag: 'BackgroundService');
-          mockSubscription = mockSensor
-              .readings(deviceId: 'mock-device', interval: interval)
-              .listen((reading) async {
-            try {
-              await handleReading(reading);
-            } catch (e) {
-              DebugLogger()
-                  .e('Mock handler error: $e', tag: 'BackgroundService');
-            }
-          });
-          return;
-        }
-
-        DebugLogger().i('Background BLE scanning started',
+      void startHeartbeat() {
+        heartbeatTimer?.cancel();
+        DebugLogger().i(
+            'Heartbeat every ${heartbeatInterval.inSeconds}s',
             tag: 'BackgroundService');
-        // Send a heartbeat to the main isolate every tick so we can confirm
-        // the background service is alive even when no readings change.
-        scanTimer = Timer.periodic(interval, (_) async {
-          try {
-            await scanner.scan(timeout: const Duration(seconds: 4));
-            // Heartbeat: send a null reading so the main isolate knows
-            // the background service is still running.
-            uiPort ??=
-                IsolateNameServer.lookupPortByName(AppConstants.uiIsolatePortName);
-            if (uiPort != null) {
-              uiPort!.send(null);
-            }
-          } catch (e) {
-            DebugLogger()
-                .e('Background scan error: $e', tag: 'BackgroundService');
+
+        // Send first heartbeat immediately to confirm alive at startup.
+        uiPort ??= IsolateNameServer.lookupPortByName(
+            AppConstants.uiIsolatePortName);
+        uiPort?.send(null);
+
+        heartbeatTimer = Timer.periodic(heartbeatInterval, (_) {
+          uiPort ??= IsolateNameServer.lookupPortByName(
+              AppConstants.uiIsolatePortName);
+          if (uiPort != null) {
+            uiPort!.send(null);
+            DebugLogger().v('Heartbeat sent', tag: 'BackgroundService');
+          } else {
+            DebugLogger().v(
+                'Heartbeat skipped — no uiPort registered',
+                tag: 'BackgroundService');
           }
         });
       }
-
-      // Wire the scanner's reading callback.
-      scanner.onReading = (Reading reading) {
-        handleReading(reading).catchError((e) {
-          DebugLogger().e('Background handleReading error: $e',
-              tag: 'BackgroundService');
-        });
-      };
 
       service.on('stopService').listen((event) {
-        cancelAll();
+        DebugLogger().i(
+            'Background service stopping', tag: 'BackgroundService');
+        heartbeatTimer?.cancel();
         service.stopSelf();
       });
 
       service.on('updateSettings').listen((event) {
-        startScanning();
+        DebugLogger().i(
+            'Background service updateSettings received (heartbeat unchanged)',
+            tag: 'BackgroundService');
+        // Heartbeat interval is fixed; nothing to re-read.
       });
 
-      startScanning();
+      startHeartbeat();
     } catch (e, s) {
       DebugLogger().e(
         'BackgroundService onStart error: $e\n$s',

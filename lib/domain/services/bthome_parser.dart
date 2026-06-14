@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:temp_monitor/domain/models/reading.dart';
+import 'package:temp_monitor/infrastructure/debug_logger.dart';
 
 class BThomeParseException implements Exception {
   final String message;
@@ -99,6 +100,11 @@ class BThomeParser {
     if ((header & 0x01) != 0) {
       throw BThomeParseException('Encrypted BThome packets are not supported');
     }
+
+    DebugLogger().v(
+        'Parsing BThome packet from $deviceId: '
+        '${bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}',
+        tag: 'BThomeParser');
 
     double? temperature;
     double? humidity;

@@ -44,13 +44,23 @@ class BleScanner {
     if (_initialized) {
       if (FlutterBluePlus.adapterStateNow != BluetoothAdapterState.unknown &&
           FlutterBluePlus.adapterStateNow == BluetoothAdapterState.off) {
+        DebugLogger().w(
+            'Bluetooth adapter turned off, re-initializing',
+            tag: 'BleScanner');
         _initialized = false;
       } else {
         return;
       }
     }
+    DebugLogger().d(
+        'Waiting for Bluetooth adapter state... '
+        '(current: ${FlutterBluePlus.adapterStateNow.name})',
+        tag: 'BleScanner');
     await FlutterBluePlus.adapterState
         .firstWhere((s) => s != BluetoothAdapterState.unknown);
+    DebugLogger().i(
+        'Bluetooth adapter ready: ${FlutterBluePlus.adapterStateNow.name}',
+        tag: 'BleScanner');
     _initialized = true;
   }
 
@@ -86,18 +96,35 @@ class BleScanner {
     final scanTimeout = timeout ?? const Duration(seconds: 4);
     _scanning = true;
 
+    DebugLogger().d('Scan started (timeout: ${scanTimeout.inSeconds}s)',
+        tag: 'BleScanner');
+
     // Real-time listener for nearby devices display and BThome accumulation.
     final nearbyDevices = <NearbyDevice>[];
     final bthomeReadings = <Reading>[];
     StreamSubscription? rtSub;
+    int totalResultsSeen = 0;
 
     try {
       rtSub = FlutterBluePlus.scanResults.listen((results) {
         final now = DateTime.now();
+        totalResultsSeen += results.length;
         for (final result in results) {
+          final deviceId = result.device.remoteId.str;
+          final rssi = result.rssi;
+          final name = result.device.advName.isNotEmpty
+              ? result.device.advName
+              : '(unnamed)';
+          final hasServiceData =
+              result.advertisementData.serviceData.isNotEmpty;
+
+          DebugLogger().v(
+              'Scan result: $name ($deviceId) RSSI=$rssi '
+              'serviceData=${hasServiceData ? "yes" : "no"} '
+              'advDataLen=${result.advertisementData.manufacturerData.length}',
+              tag: 'BleScanner');
+
           _updateNearby(result, now, nearbyDevices);
-          // Process BThome data as it arrives — accumulate partial
-          // readings across multiple advertisements.
           _accumulateBThome(result, now, bthomeReadings);
         }
       });
@@ -111,6 +138,12 @@ class BleScanner {
         await FlutterBluePlus.stopScan();
       } catch (_) {}
     }
+
+    DebugLogger().d(
+        'Scan finished: $totalResultsSeen results, '
+        '${bthomeReadings.length} BThome readings, '
+        '${nearbyDevices.length} unique devices',
+        tag: 'BleScanner');
 
     // Also check lastScanResults for any BThome data we might have missed.
     for (final result in FlutterBluePlus.lastScanResults) {
@@ -226,8 +259,11 @@ class BleScanner {
           '${reading.humidity?.toStringAsFixed(1) ?? "?"}%',
           tag: 'BleScanner');
       return;
-    } on BThomeParseException {
+    } on BThomeParseException catch (e) {
       // Fall through to manual extraction below.
+      DebugLogger().v(
+          'BThomeParser rejected $deviceId packet: $e — trying manual fallback',
+          tag: 'BleScanner');
     }
 
     // Manual fallback for packets the parser can't handle.
@@ -250,6 +286,11 @@ class BleScanner {
 
     final header = bytes[0];
     if ((header & 0x01) != 0) return; // encrypted, skip
+
+    DebugLogger().v(
+        'MergePartial from $deviceId: '
+        '${bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}',
+        tag: 'BleScanner');
 
     final byteData = Uint8List.fromList(bytes).buffer.asByteData();
     double? temperature;
