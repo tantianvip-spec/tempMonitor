@@ -204,7 +204,10 @@ class HistoryChart extends StatelessWidget {
     final mn = values.reduce((a, b) => a < b ? a : b);
     final mx = values.reduce((a, b) => a > b ? a : b);
     final range = mx - mn;
-    final padding = range > 0 ? range * 0.1 : 1.0;
+    // Ensure generous padding even when all values are nearly identical,
+    // so tiny sensor noise (e.g. 25.04 vs 25.05) doesn't create a
+    // visually steep slope. Minimum padding: 0.5°C / 5% humidity.
+    final padding = range > 0.5 ? range * 0.15 : 0.5;
     return (mn - padding);
   }
 
@@ -212,7 +215,7 @@ class HistoryChart extends StatelessWidget {
     final mn = values.reduce((a, b) => a < b ? a : b);
     final mx = values.reduce((a, b) => a > b ? a : b);
     final range = mx - mn;
-    final padding = range > 0 ? range * 0.1 : 1.0;
+    final padding = range > 0.5 ? range * 0.15 : 0.5;
     return (mx + padding);
   }
 }
