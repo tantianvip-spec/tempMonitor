@@ -218,7 +218,7 @@ class BleScanner {
               DebugLogger().d(
                   'All known devices have temp + humidity — stopping scan early',
                   tag: 'BleScanner');
-              completer.complete();
+              if (!completer.isCompleted) completer.complete();
             }
           }
         }
@@ -233,13 +233,21 @@ class BleScanner {
       // not in the advertised service UUIDs list — withServices would
       // silently drop our sensors.
       final remoteIds = hasKnownFilter ? knownIds.toList() : <String>[];
+      DebugLogger().d(
+          'Starting BLE scan withRemoteIds: ${remoteIds.isEmpty ? "(none)" : remoteIds.join(", ")}',
+          tag: 'BleScanner');
       await FlutterBluePlus.startScan(withRemoteIds: remoteIds);
 
       // Wait for either completion (all devices have temp+humidity) or
       // timeout. The safety timer prevents the scan from running forever
       // if a device never sends one of the values.
       if (useDynamic) {
-        safetyTimer = Timer(scanTimeout, () => completer.complete());
+        safetyTimer = Timer(scanTimeout, () {
+          DebugLogger().d(
+              'Dynamic scan timeout reached (${scanTimeout.inSeconds}s)',
+              tag: 'BleScanner');
+          if (!completer.isCompleted) completer.complete();
+        });
         await completer.future;
         safetyTimer.cancel();
       } else {
