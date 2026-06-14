@@ -142,7 +142,6 @@ class BleScanner {
     final bthomeReadings = <Reading>[];
     StreamSubscription? rtSub;
     int totalResultsSeen = 0;
-    int filteredResults = 0;
 
     try {
       rtSub = FlutterBluePlus.scanResults.listen((results) {
@@ -150,15 +149,6 @@ class BleScanner {
         totalResultsSeen += results.length;
         for (final result in results) {
           final deviceId = result.device.remoteId.str;
-
-          // When we know which devices we care about, skip everything else.
-          // This avoids processing hundreds of irrelevant scan results
-          // every tick.
-          if (hasKnownFilter && !knownIds.contains(deviceId)) {
-            filteredResults++;
-            continue;
-          }
-
           final rssi = result.rssi;
           final name = result.device.advName.isNotEmpty
               ? result.device.advName
@@ -177,14 +167,16 @@ class BleScanner {
         }
       });
 
-      // Start scan. We do NOT use withServices here because ATC_PVVX
-      // sensors include the BThome UUID only in the serviceData map of the
-      // advertisement, not in the advertised service UUIDs list. The
-      // withServices parameter filters on the latter, which would silently
-      // drop all our sensors at the OS level.
-      // Instead, we filter at the application layer: BThome data check
-      // (for discovery) and knownDeviceIds (for normal monitoring).
-      await FlutterBluePlus.startScan();
+      // Start scan. When monitoring known devices, pass their MAC addresses
+      // to withRemoteIds so the BLE controller filters at the OS level —
+      // only broadcasts from these devices trigger callbacks, avoiding
+      // hundreds of irrelevant packets from soundbars, lights, etc.
+      // We do NOT use withServices here because ATC_PVVX sensors include
+      // the BThome UUID only in the serviceData map of the advertisement,
+      // not in the advertised service UUIDs list — withServices would
+      // silently drop our sensors.
+      final remoteIds = hasKnownFilter ? knownIds.toList() : <String>[];
+      await FlutterBluePlus.startScan(withRemoteIds: remoteIds);
       await Future.delayed(scanTimeout);
     } finally {
       _scanning = false;
@@ -196,16 +188,12 @@ class BleScanner {
 
     DebugLogger().d(
         'Scan finished: $totalResultsSeen results, '
-        '$filteredResults filtered (knownIds=$hasKnownFilter), '
         '${bthomeReadings.length} BThome readings, '
         '${nearbyDevices.length} unique devices',
         tag: 'BleScanner');
 
     // Also check lastScanResults for any BThome data we might have missed.
     for (final result in FlutterBluePlus.lastScanResults) {
-      if (hasKnownFilter && !knownIds.contains(result.device.remoteId.str)) {
-        continue;
-      }
       _parseBThome(result, DateTime.now(), bthomeReadings);
     }
 

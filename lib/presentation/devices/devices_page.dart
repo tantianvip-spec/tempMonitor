@@ -57,27 +57,19 @@ class _DevicesPageState extends State<DevicesPage> {
   void _startScan() {
     setState(() => _isScanning = true);
     context.read<ScanService>().forceRestart();
-    context.read<ScanService>().scanNow();
+    context.read<ScanService>().startDiscoveryScan();
 
     _nearbySubscription?.cancel();
     _nearbySubscription = context.read<ScanService>().nearbyDevices.listen((bundle) {
       if (!mounted) return;
       setState(() => _nearbyDevices = bundle.nearbyDevices);
-      _clearTimer?.cancel();
-      _clearTimer = Timer(const Duration(seconds: 10), () {
-        if (!mounted) return;
-        setState(() {
-          _nearbyDevices = [];
-          _isScanning = false;
-        });
-      });
     });
   }
 
   void _stopScan() {
+    context.read<ScanService>().stopDiscoveryScan();
     _nearbySubscription?.cancel();
     _nearbySubscription = null;
-    _clearTimer?.cancel();
     _nearbyDevices = [];
     _isScanning = false;
     if (mounted) setState(() {});

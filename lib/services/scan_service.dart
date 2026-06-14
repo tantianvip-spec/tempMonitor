@@ -46,6 +46,14 @@ class ScanService {
   int _currentIntervalSec = 0;
   ReceivePort? _receivePort;
 
+  /// Tracks which devices have been persisted in the current scan tick,
+  /// so duplicate BLE callbacks within the same window don't cause
+  /// redundant DB writes. Cleared at the end of each scan tick.
+  final Set<String> _tickSaved = {};
+
+  /// True while a continuous discovery scan loop is running.
+  bool _discoveryScanning = false;
+
 
   /// Cached set of known device IDs, refreshed each scan tick so newly
   /// added devices are picked up without a restart.
@@ -161,6 +169,10 @@ class ScanService {
         tag: 'ScanService');
     _scanTimer = Timer.periodic(interval, (_) async {
       DebugLogger().d('Scan tick starting', tag: 'ScanService');
+      // Clear per-tick dedup set before the scan window starts.
+      // This ensures each device is persisted at most once per tick,
+      // even if BLE delivers duplicate broadcasts of the same packet.
+      _tickSaved.clear();
       try {
         // Refresh known device IDs each tick so newly added devices are
         // picked up immediately without a service restart.
@@ -170,10 +182,11 @@ class ScanService {
             'Known devices: ${_knownDeviceIds.length}',
             tag: 'ScanService');
 
-        // Scan window must exceed the sensor's advertising interval
-        // (ATC_PVVX: ~5-10s) so we reliably catch at least one broadcast.
+        // Scan window (15s) must exceed the sensor's advertising interval
+        // (ATC_PVVX: ~5-10s) so we reliably catch at least one broadcast
+        // even if the first one is missed by a few ms.
         await _scanner.scan(
-          timeout: const Duration(seconds: 10),
+          timeout: const Duration(seconds: 15),
           knownDeviceIds: _knownDeviceIds.isEmpty ? null : _knownDeviceIds,
         );
       } catch (e) {
@@ -206,11 +219,12 @@ class ScanService {
     DebugLogger().i(
         'refreshNow() — immediate monitoring scan',
         tag: 'ScanService');
+    _tickSaved.clear();
     try {
       final devices = await _repository.getAllDevices();
       _knownDeviceIds = devices.map((d) => d.id).toSet();
       await _scanner.scan(
-        timeout: const Duration(seconds: 10),
+        timeout: const Duration(seconds: 15),
         knownDeviceIds: _knownDeviceIds.isEmpty ? null : _knownDeviceIds,
       );
     } catch (e) {
@@ -232,8 +246,37 @@ class ScanService {
     }
   }
 
+  /// Start a continuous BLE discovery scan that runs until [stopDiscoveryScan]
+  /// is called. Used by the devices page drawer — keeps scanning so new
+  /// sensors appear in real time until the user taps "停止扫描".
+  Future<void> startDiscoveryScan() async {
+    if (_settings.getMockDeviceEnabled()) return;
+    if (_discoveryScanning) return;
+    _discoveryScanning = true;
+    DebugLogger().i(
+        'startDiscoveryScan() — continuous scan for device discovery',
+        tag: 'ScanService');
+    // Runs 3s scan windows in a loop. Between windows the BLE stack gets a
+    // brief rest, and the loop checks _discoveryScanning before the next
+    // window. When the user stops, the current window finishes and the loop
+    // exits naturally.
+    while (_discoveryScanning) {
+      await _scanner.scanForDiscovery(timeout: const Duration(seconds: 3));
+    }
+  }
+
+  /// Stop the continuous discovery scan.
+  void stopDiscoveryScan() {
+    _discoveryScanning = false;
+    _scanner.stopScan();
+    DebugLogger().i(
+        'stopDiscoveryScan() — continuous scan stopped',
+        tag: 'ScanService');
+  }
+
   void stop() {
     _started = false;
+    _discoveryScanning = false;
     _cancelAll();
     _receivePort?.close();
     _receivePort = null;
@@ -245,11 +288,21 @@ class ScanService {
   void _handleReading(Reading reading) {
     // Skip readings that carry no temperature or humidity data (e.g.
     // battery-only lifecycle packets from ATC sensors). Don't update
-    // _lastSaved either, so a subsequent real reading won't be seen as
-    // "unchanged" against a null-metric reading.
+    // _tickSaved either, so a subsequent real reading won't be blocked.
     if (reading.temperature == null && reading.humidity == null) {
       DebugLogger().v(
           'Skip save (no temp/humidity) ${reading.deviceId}',
+          tag: 'ScanService');
+      return;
+    }
+
+    // Per-tick dedup: within one scan window, BLE may deliver the same
+    // broadcast packet multiple times. Only persist the first occurrence
+    // per device per tick. Cross-tick, every device is written once even
+    // if the value hasn't changed, so the history chart is continuous.
+    if (!_tickSaved.add(reading.deviceId)) {
+      DebugLogger().v(
+          'Skip duplicate save (already saved this tick) ${reading.deviceId}',
           tag: 'ScanService');
       return;
     }
