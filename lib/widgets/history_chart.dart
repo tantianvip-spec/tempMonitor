@@ -167,8 +167,8 @@ class HistoryChart extends StatelessWidget {
               show: true,
               getDotPainter: (spot, percent, barData, index) {
                 return FlDotCirclePainter(
-                  radius: 2,
-                  strokeWidth: 1,
+                  radius: 1.5,
+                  strokeWidth: 0,
                   color: color,
                 );
               },
