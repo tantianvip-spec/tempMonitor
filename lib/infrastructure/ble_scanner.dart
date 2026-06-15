@@ -122,8 +122,15 @@ class BleScanner {
   ///
   /// When [dynamicCompletion] is true and [knownDeviceIds] is non-empty,
   /// the scan stops as soon as every known device has produced both a
-  /// temperature AND a humidity reading. Otherwise (or when there are no
-  /// known devices), the scan runs for the full [timeout].
+  /// temperature AND a humidity reading, subject to a minimum scan duration
+  /// (_minDynamicScanDuration). This prevents Android BLE cache results
+  /// (delivered immediately on startScan) from triggering an early stop
+  /// before the sensor has a chance to broadcast a fresh packet.
+  ///
+  /// Otherwise (or when there are no known devices), the scan runs for the
+  /// full [timeout].
+  static const _minDynamicScanDuration = Duration(seconds: 5);
+  DateTime? _scanStartedAt;
   Future<void> _runScanWindow({
     Duration? timeout,
     Set<String>? knownDeviceIds,
@@ -163,6 +170,7 @@ class BleScanner {
     final hasKnownFilter = knownIds != null && knownIds.isNotEmpty;
     final useDynamic = dynamicCompletion && hasKnownFilter;
     _scanning = true;
+    _scanStartedAt = DateTime.now();
 
     DebugLogger().d(
         'Scan started (timeout: ${scanTimeout.inSeconds}s, '
@@ -217,7 +225,7 @@ class BleScanner {
               outNewReadings: newReadings);
           if (useDynamic && newReadings.isNotEmpty) {
             _updateDeviceCompletionState(newReadings);
-            if (_allDevicesComplete()) {
+            if (_allDevicesComplete() && _hasMinScanDurationElapsed()) {
               DebugLogger().d(
                   'All known devices have temp + humidity — stopping scan early',
                   tag: 'BleScanner');
@@ -304,6 +312,14 @@ class BleScanner {
   bool _allDevicesComplete() {
     return _knownDeviceComplete.values
         .every((state) => state.hasTemperature && state.hasHumidity);
+  }
+
+  /// Check whether the minimum scan duration has elapsed since the scan
+  /// window started. Prevents Android BLE cache results from triggering
+  /// an early stop before the sensor has a chance to broadcast fresh data.
+  bool _hasMinScanDurationElapsed() {
+    if (_scanStartedAt == null) return true;
+    return DateTime.now().difference(_scanStartedAt!) >= _minDynamicScanDuration;
   }
 
   /// Update the nearby-devices list from a scan result (real-time display).
