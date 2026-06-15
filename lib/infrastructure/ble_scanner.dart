@@ -6,6 +6,7 @@ import 'package:temp_monitor/core/constants.dart';
 import 'package:temp_monitor/domain/models/nearby_device.dart';
 import 'package:temp_monitor/domain/models/reading.dart';
 import 'package:temp_monitor/domain/services/bthome_parser.dart';
+import 'package:temp_monitor/domain/services/custom_firmware_parser.dart';
 import 'package:temp_monitor/infrastructure/debug_logger.dart';
 
 /// Result of a single BLE scan tick — all nearby devices + any new
@@ -212,6 +213,8 @@ class BleScanner {
           final newReadings = <Reading>[];
           _accumulateBThome(result, now, bthomeReadings,
               outNewReadings: newReadings);
+          _accumulateCustomFirmware(result, now, bthomeReadings,
+              outNewReadings: newReadings);
           if (useDynamic && newReadings.isNotEmpty) {
             _updateDeviceCompletionState(newReadings);
             if (_allDevicesComplete()) {
@@ -273,6 +276,7 @@ class BleScanner {
     // Also check lastScanResults for any BThome data we might have missed.
     for (final result in FlutterBluePlus.lastScanResults) {
       _parseBThome(result, DateTime.now(), bthomeReadings);
+      _parseCustomFirmware(result, DateTime.now(), bthomeReadings);
     }
 
     _scanResultsController.add(ScanResultBundle(
@@ -310,9 +314,8 @@ class BleScanner {
   ) {
     final deviceId = result.device.remoteId.str;
     final serviceData = result.advertisementData.serviceData;
-    final guid = Guid(AppConstants.bthomeServiceUuid);
-    final bytes = serviceData[guid];
-    final isBThome = bytes != null && bytes.isNotEmpty;
+    final isBThome = _hasBThomeServiceData(serviceData);
+    final isCustomFirmware = _hasCustomFirmwareServiceData(serviceData);
 
     final existingIdx =
         nearbyDevices.indexWhere((d) => d.deviceId == deviceId);
@@ -321,7 +324,7 @@ class BleScanner {
       name:
           result.device.advName.isNotEmpty ? result.device.advName : null,
       rssi: result.rssi,
-      isBThomeCompatible: isBThome,
+      isBThomeCompatible: isBThome || isCustomFirmware,
       lastSeen: now,
     );
     if (existingIdx >= 0) {
@@ -329,6 +332,20 @@ class BleScanner {
     } else {
       nearbyDevices.add(nearby);
     }
+  }
+
+  /// Check if any service data is BThome (UUID 0xFCD2).
+  bool _hasBThomeServiceData(Map<Guid, List<int>> serviceData) {
+    final guid = Guid(AppConstants.bthomeServiceUuid);
+    final bytes = serviceData[guid];
+    return bytes != null && bytes.isNotEmpty;
+  }
+
+  /// Check if any service data is custom firmware (UUID 0x181A).
+  bool _hasCustomFirmwareServiceData(Map<Guid, List<int>> serviceData) {
+    final guid = Guid(AppConstants.customFirmwareServiceUuid);
+    final bytes = serviceData[guid];
+    return bytes != null && bytes.isNotEmpty;
   }
 
   /// Try to parse BThome data from a single scan result.
@@ -368,6 +385,34 @@ class BleScanner {
             'Partial BThome packet from $deviceId: $e', tag: 'BleScanner');
       }
     }
+  }
+
+  /// Try to parse custom firmware data (UUID 0x181A) from a single scan
+  /// result. Used for lastScanResults check after scan finishes.
+  void _parseCustomFirmware(
+    ScanResult result,
+    DateTime now,
+    List<Reading> bthomeReadings,
+  ) {
+    final deviceId = result.device.remoteId.str;
+    final serviceData = result.advertisementData.serviceData;
+    final guid = Guid(AppConstants.customFirmwareServiceUuid);
+    final bytes = serviceData[guid];
+    if (bytes == null || bytes.isEmpty) return;
+
+    final lastSeen = _lastSeen[deviceId];
+    if (lastSeen != null && now.difference(lastSeen) < _debounceDuration) {
+      return;
+    }
+
+    final reading = CustomFirmwareParser.parse(
+      bytes,
+      deviceId: deviceId,
+      rssi: result.rssi,
+    );
+    if (reading == null) return;
+    _lastSeen[deviceId] = now;
+    bthomeReadings.add(reading);
   }
 
   /// Accumulate BThome data from a scan result. Tries full parse first;
@@ -417,6 +462,38 @@ class BleScanner {
     // Manual fallback for packets the parser can't handle.
     _mergePartial(bytes, deviceId, result.rssi, now, bthomeReadings,
         outNewReadings: outNewReadings);
+  }
+
+  /// Accumulate custom firmware data (UUID 0x181A) from a scan result.
+  ///
+  /// The custom firmware broadcasts temperature, humidity and battery in
+  /// every packet, so parsing is straightforward — no partial fallback
+  /// needed. Every valid packet becomes a complete [Reading].
+  ///
+  /// When [outNewReadings] is provided, newly parsed readings are appended
+  /// to it so callers can track which devices just got temp/humidity data
+  /// (used for dynamic scan window early-stop).
+  void _accumulateCustomFirmware(
+    ScanResult result,
+    DateTime now,
+    List<Reading> bthomeReadings, {
+    List<Reading>? outNewReadings,
+  }) {
+    final deviceId = result.device.remoteId.str;
+    final serviceData = result.advertisementData.serviceData;
+    final guid = Guid(AppConstants.customFirmwareServiceUuid);
+    final bytes = serviceData[guid];
+    if (bytes == null || bytes.isEmpty) return;
+
+    final reading = CustomFirmwareParser.parse(
+      bytes,
+      deviceId: deviceId,
+      rssi: result.rssi,
+    );
+    if (reading == null) return;
+
+    bthomeReadings.add(reading);
+    outNewReadings?.add(reading);
   }
 
   /// Extract temperature/humidity/battery from a partial BThome packet
