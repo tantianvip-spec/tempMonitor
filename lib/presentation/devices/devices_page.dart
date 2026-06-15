@@ -417,7 +417,7 @@ class _NearbyDeviceTile extends StatelessWidget {
               borderRadius: BorderRadius.circular(3),
             ),
             child: Text(
-              device.isBThomeCompatible ? 'BThome' : '未知',
+              device.isBThomeCompatible ? (device.protocol ?? 'BThome') : '未知',
               style: TextStyle(
                 fontSize: 9,
                 fontWeight: FontWeight.w600,

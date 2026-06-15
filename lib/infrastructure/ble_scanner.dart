@@ -325,6 +325,7 @@ class BleScanner {
           result.device.advName.isNotEmpty ? result.device.advName : null,
       rssi: result.rssi,
       isBThomeCompatible: isBThome || isCustomFirmware,
+      protocol: isCustomFirmware ? 'Custom' : (isBThome ? 'BThome' : null),
       lastSeen: now,
     );
     if (existingIdx >= 0) {

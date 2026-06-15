@@ -6,6 +6,7 @@ class NearbyDevice extends Equatable {
   final String? name;
   final int rssi;
   final bool isBThomeCompatible;
+  final String? protocol;
   final DateTime lastSeen;
 
   const NearbyDevice({
@@ -13,6 +14,7 @@ class NearbyDevice extends Equatable {
     this.name,
     required this.rssi,
     required this.isBThomeCompatible,
+    this.protocol,
     required this.lastSeen,
   });
 
@@ -21,6 +23,7 @@ class NearbyDevice extends Equatable {
     String? name,
     int? rssi,
     bool? isBThomeCompatible,
+    String? protocol,
     DateTime? lastSeen,
   }) =>
       NearbyDevice(
@@ -28,10 +31,11 @@ class NearbyDevice extends Equatable {
         name: name ?? this.name,
         rssi: rssi ?? this.rssi,
         isBThomeCompatible: isBThomeCompatible ?? this.isBThomeCompatible,
+        protocol: protocol ?? this.protocol,
         lastSeen: lastSeen ?? this.lastSeen,
       );
 
   @override
   List<Object?> get props =>
-      [deviceId, name, rssi, isBThomeCompatible, lastSeen];
+      [deviceId, name, rssi, isBThomeCompatible, protocol, lastSeen];
 }
