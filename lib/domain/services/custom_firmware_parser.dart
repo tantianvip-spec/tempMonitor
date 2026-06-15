@@ -6,23 +6,24 @@ import 'package:temp_monitor/infrastructure/debug_logger.dart';
 /// Custom firmware parser for ATC_PVVX sensors flashed with custom firmware.
 ///
 /// The custom firmware broadcasts on UUID 0x181A (Environmental Sensing
-/// Service) with the following payload format (offsets from start of
-/// service data):
+/// Service). FlutterBluePlus extracts the AD structure's service data
+/// (after the UUID bytes) into the serviceData map. The layout is:
 ///
 ///   Offset 0-5:   MAC address (6 bytes, correct order)
 ///   Offset 6-7:   Temperature sint16 LE (divide by 100)
-///   Offset 8:     Humidity uint8 (percent)
-///   Offset 9:     Battery uint8 (percent)
+///   Offset 8-9:   Humidity uint16 LE (divide by 100)
 ///   Offset 10-11: Battery voltage uint16 LE (mV)
-///   Offset 12:    Frame packet counter (uint8)
+///   Offset 12:    Battery level uint8 (0-100%)
+///   Offset 13:    Frame packet counter (uint8)
+///   Offset 14:    Flags (GPIO_TRG pin status)
 ///
 /// Every packet contains temperature + humidity + battery, so unlike ATC
 /// original firmware there are no lifecycle-only packets — every broadcast
 /// is a valid Reading.
 class CustomFirmwareParser {
   /// Minimum service data length for a valid custom firmware packet.
-  /// MAC(6) + temp(2) + humidity(1) + battery(1) + mV(2) + counter(1) = 13.
-  static const int _minDataLength = 13;
+  /// MAC(6) + temp(2) + humidity(2) + mV(2) + battery(1) + counter(1) + flags(1) = 15.
+  static const int _minDataLength = 15;
 
   // Physical sanity bounds — matches BThomeParser constants.
   static const double _minTemp = -40.0;
@@ -48,15 +49,20 @@ class CustomFirmwareParser {
 
     final byteData = Uint8List.fromList(serviceData).buffer.asByteData();
 
-    // Offset 6-7: Temperature sint16 LE
+    // Offset 6-7: Temperature sint16 LE (/100)
     final tempRaw = byteData.getInt16(6, Endian.little);
     final temperature = tempRaw / 100.0;
 
-    // Offset 8: Humidity uint8
-    final humidity = serviceData[8].toDouble();
+    // Offset 8-9: Humidity uint16 LE (/100)
+    final humidityRaw = byteData.getUint16(8, Endian.little);
+    final humidity = humidityRaw / 100.0;
 
-    // Offset 9: Battery percent
-    final battery = serviceData[9];
+    // Offset 10-11: Battery voltage uint16 LE (mV)
+    // (not used in Reading model but parsed for completeness)
+    // final batteryMv = byteData.getUint16(10, Endian.little);
+
+    // Offset 12: Battery level uint8 (0-100%)
+    final battery = serviceData[12];
 
     // Validate physical bounds.
     if (temperature < _minTemp || temperature > _maxTemp) {
