@@ -45,7 +45,8 @@ app.*.map.json
 # Project-specific
 .worktrees/
 
-# Android signing — DO NOT COMMIT
+# Android signing — DO NOT COMMIT (except debug.keystore for CI)
 android/key.properties
 android/app/*.jks
 android/app/*.keystore
+!android/app/debug.keystore
