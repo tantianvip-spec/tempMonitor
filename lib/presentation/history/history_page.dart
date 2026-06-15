@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:temp_monitor/presentation/history/history_cubit.dart';
+import 'package:temp_monitor/presentation/history/history_enums.dart';
 import 'package:temp_monitor/widgets/history_chart.dart';
 
 class HistoryPage extends StatelessWidget {

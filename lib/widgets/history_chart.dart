@@ -3,16 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:temp_monitor/core/theme.dart';
 import 'package:temp_monitor/domain/models/reading.dart';
-import 'package:temp_monitor/presentation/history/history_cubit.dart';
+import 'package:temp_monitor/presentation/history/history_enums.dart';
 
 class HistoryChart extends StatelessWidget {
   final List<Reading> readings;
   final HistoryRange range;
+  final bool embedded;
 
   const HistoryChart({
     super.key,
     required this.readings,
     required this.range,
+    this.embedded = false,
   });
 
   @override
@@ -47,8 +49,7 @@ class HistoryChart extends StatelessWidget {
         .map((r) => r.recordedAt.millisecondsSinceEpoch.toDouble())
         .toList();
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
+    final chartContent = Column(
       children: [
         if (temps.isNotEmpty)
           _ChartSection(
@@ -85,6 +86,12 @@ class HistoryChart extends StatelessWidget {
           ),
         const SizedBox(height: 16),
       ],
+    );
+
+    if (embedded) return chartContent;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
+      children: [chartContent],
     );
   }
 
