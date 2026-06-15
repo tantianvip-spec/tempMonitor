@@ -334,6 +334,8 @@ class _ScanDrawer extends StatelessWidget {
                                     device.deviceId,
                                     name: device.name,
                                   );
+                              // Stop scanning after successful add.
+                              onStopScan();
                               Navigator.of(context).pop(); // close drawer
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
