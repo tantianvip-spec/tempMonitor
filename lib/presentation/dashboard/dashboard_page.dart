@@ -36,11 +36,11 @@ class DashboardPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // PageView for device cards
+                  // Full-width PageView for device cards
                   SizedBox(
-                    height: 140,
+                    height: 96,
                     child: PageView.builder(
-                      controller: PageController(viewportFraction: 0.55),
+                      controller: PageController(viewportFraction: 1.0),
                       itemCount: state.devices.length,
                       onPageChanged: (index) {
                         context.read<DashboardCubit>().switchToDevice(index);
@@ -51,7 +51,7 @@ class DashboardPage extends StatelessWidget {
                             ? state.latestReading
                             : null;
                         return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 0),
                           child: DeviceOverviewCard(
                             deviceName: device.name,
                             reading: reading,
