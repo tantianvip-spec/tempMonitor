@@ -93,13 +93,14 @@ class BackgroundService {
       DartPluginRegistrant.ensureInitialized();
 
       // Show the foreground service notification so Android keeps the
-      // process alive.
+      // process alive. Call setAsForegroundService() FIRST to meet the
+      // 5-second window, then update the notification content.
       if (service is AndroidServiceInstance) {
+        await service.setAsForegroundService();
         service.setForegroundNotificationInfo(
           title: '温湿度监控',
           content: '正在后台监听设备...',
         );
-        await service.setAsForegroundService();
       }
 
       DebugLogger().i(
