@@ -62,7 +62,18 @@ class _DevicesPageState extends State<DevicesPage> {
     _nearbySubscription?.cancel();
     _nearbySubscription = context.read<ScanService>().nearbyDevices.listen((bundle) {
       if (!mounted) return;
-      setState(() => _nearbyDevices = bundle.nearbyDevices);
+      setState(() {
+        // Merge: keep existing devices that didn't reappear in this window,
+        // update/append from the new bundle.
+        for (final device in bundle.nearbyDevices) {
+          final idx = _nearbyDevices.indexWhere((d) => d.deviceId == device.deviceId);
+          if (idx >= 0) {
+            _nearbyDevices[idx] = device;
+          } else {
+            _nearbyDevices.add(device);
+          }
+        }
+      });
     });
   }
 
