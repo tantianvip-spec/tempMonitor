@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // ── Dark theme colors ──────────────────────────────────────────
@@ -99,40 +98,43 @@ class AppTheme {
       scaffoldBackgroundColor: bgPrimary,
       cardColor: bgSecondary,
       dividerColor: border,
-      textTheme: GoogleFonts.manropeTextTheme(base.textTheme).copyWith(
-        displayLarge: GoogleFonts.jetBrainsMono(
+      textTheme: base.textTheme.copyWith(
+        displayLarge: const TextStyle(
+          fontFamily: 'JetBrainsMono',
           fontSize: 72,
           fontWeight: FontWeight.w300,
           letterSpacing: -2,
-          color: colorScheme.onSurface,
         ),
-        displayMedium: GoogleFonts.jetBrainsMono(
+        displayMedium: const TextStyle(
+          fontFamily: 'JetBrainsMono',
           fontSize: 48,
           fontWeight: FontWeight.w300,
           letterSpacing: -1,
-          color: colorScheme.onSurface,
         ),
-        titleLarge: GoogleFonts.manrope(
+        titleLarge: const TextStyle(
+          fontFamily: 'Manrope',
           fontSize: 20,
           fontWeight: FontWeight.w600,
-          color: colorScheme.onSurface,
         ),
-        titleMedium: GoogleFonts.manrope(
+        titleMedium: const TextStyle(
+          fontFamily: 'Manrope',
           fontSize: 16,
           fontWeight: FontWeight.w600,
-          color: colorScheme.onSurface,
         ),
-        bodyMedium: GoogleFonts.manrope(
+        bodyMedium: const TextStyle(
+          fontFamily: 'Manrope',
           fontSize: 14,
           fontWeight: FontWeight.w400,
-          color: colorScheme.onSurface,
         ),
-        labelSmall: GoogleFonts.manrope(
+        labelSmall: const TextStyle(
+          fontFamily: 'Manrope',
           fontSize: 11,
           fontWeight: FontWeight.w500,
           letterSpacing: 0.5,
-          color: colorScheme.onSurfaceVariant,
         ),
+      ).apply(
+        displayColor: colorScheme.onSurface,
+        bodyColor: colorScheme.onSurface,
       ),
       cardTheme: CardTheme(
         color: bgSecondary,
