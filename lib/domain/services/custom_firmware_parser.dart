@@ -14,16 +14,18 @@ import 'package:temp_monitor/infrastructure/debug_logger.dart';
 ///   Offset 8-9:   Humidity uint16 LE (divide by 100)
 ///   Offset 10-11: Battery voltage uint16 LE (mV)
 ///   Offset 12:    Battery level uint8 (0-100%)
-///   Offset 13:    Frame packet counter (uint8)
-///   Offset 14:    Flags (GPIO_TRG pin status)
+///   (Optional: frame counter and flags may follow at offset 13+, but
+///    FlutterBluePlus may strip trailing bytes — we only require 13.)
 ///
 /// Every packet contains temperature + humidity + battery, so unlike ATC
 /// original firmware there are no lifecycle-only packets — every broadcast
 /// is a valid Reading.
 class CustomFirmwareParser {
   /// Minimum service data length for a valid custom firmware packet.
-  /// MAC(6) + temp(2) + humidity(2) + mV(2) + battery(1) + counter(1) + flags(1) = 15.
-  static const int _minDataLength = 15;
+  /// FlutterBluePlus extracts service data starting after the UUID bytes,
+  /// so the actual bytes are: MAC(6) + temp(2) + humidity(2) + mV(2) +
+  /// battery(1) + counter(1) + flags(1) = 15 total - 2 UUID bytes = 13.
+  static const int _minDataLength = 13;
 
   // Physical sanity bounds — matches BThomeParser constants.
   static const double _minTemp = -40.0;

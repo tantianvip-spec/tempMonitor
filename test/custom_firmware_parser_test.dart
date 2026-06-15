@@ -7,22 +7,18 @@ void main() {
     const rssi = -65;
 
     test('parses temperature, humidity and battery from service data', () {
-      // Service data layout (15 bytes):
+      // Service data layout (13 bytes, as extracted by FlutterBluePlus):
       //   Offset 0-5:   MAC = A4:C1:38:3F:B9:8D
       //   Offset 6-7:   Temperature sint16 LE = 0x0A32 → 2610 → 26.10°C
       //   Offset 8-9:   Humidity uint16 LE = 0x1388 → 5000 → 50.00%
       //   Offset 10-11: Battery voltage uint16 LE = 0x0D48 → 3400 mV
       //   Offset 12:    Battery level uint8 = 95 → 95%
-      //   Offset 13:    Frame counter = 1
-      //   Offset 14:    Flags = 0
       final bytes = <int>[
         0xA4, 0xC1, 0x38, 0x3F, 0xB9, 0x8D, // MAC
         0x32, 0x0A, // temp 26.10°C
         0x88, 0x13, // humidity 50.00%
         0x48, 0x0D, // 3400 mV
         95,         // battery 95%
-        0x01,       // frame counter
-        0x00,       // flags
       ];
 
       final reading = CustomFirmwareParser.parse(
@@ -47,8 +43,6 @@ void main() {
         0x88, 0x13, // humidity 50.00%
         0x48, 0x0D,
         90,
-        0x01,
-        0x00,
       ];
 
       final reading = CustomFirmwareParser.parse(
@@ -79,8 +73,6 @@ void main() {
         0x88, 0x13,
         0x48, 0x0D,
         90,
-        0x01,
-        0x00,
       ];
 
       final reading = CustomFirmwareParser.parse(
@@ -99,8 +91,6 @@ void main() {
         0x20, 0x4E, // humidity 200.00% — invalid
         0x48, 0x0D,
         90,
-        0x01,
-        0x00,
       ];
 
       final reading = CustomFirmwareParser.parse(
