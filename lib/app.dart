@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:temp_monitor/core/theme.dart';
 import 'package:temp_monitor/domain/models/reading.dart';
 import 'package:temp_monitor/infrastructure/notification_service.dart';
+import 'package:temp_monitor/presentation/dashboard/dashboard_cubit.dart';
+import 'package:temp_monitor/presentation/dashboard/dashboard_page.dart';
 import 'package:temp_monitor/presentation/debug/debug_log_cubit.dart';
 import 'package:temp_monitor/presentation/debug/debug_log_page.dart';
 import 'package:temp_monitor/presentation/devices/devices_page.dart';
@@ -72,7 +74,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final repository = context.read<SensorRepository>();
+    Stream<Reading>? readingStream;
+    try {
+      readingStream = Provider.of<Stream<Reading>>(context, listen: false);
+    } catch (_) {}
+
     final pages = [
+      BlocProvider(
+        create: (_) => DashboardCubit(
+          repository,
+          readingStream: readingStream,
+        ),
+        child: const DashboardPage(),
+      ),
       const DevicesPage(),
       const SettingsPage(),
       BlocProvider(
@@ -85,9 +100,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       body: IndexedStack(index: _currentIndex, children: pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
-        onDestinationSelected: (index) => setState(() => _currentIndex = index),
+        onDestinationSelected: (index) =>
+            setState(() => _currentIndex = index),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.dashboard), label: '设备'),
+          NavigationDestination(icon: Icon(Icons.dashboard), label: '仪表盘'),
+          NavigationDestination(icon: Icon(Icons.devices), label: '设备'),
           NavigationDestination(icon: Icon(Icons.settings), label: '设置'),
           NavigationDestination(icon: Icon(Icons.bug_report), label: '调试'),
         ],
