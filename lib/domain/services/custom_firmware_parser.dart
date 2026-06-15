@@ -7,23 +7,22 @@ import 'package:temp_monitor/infrastructure/debug_logger.dart';
 ///
 /// The custom firmware broadcasts on UUID 0x181A (Environmental Sensing
 /// Service). FlutterBluePlus extracts the AD structure's service data
-/// (after the UUID bytes) into the serviceData map. The layout is:
+/// (after the UUID + AD type bytes) into the serviceData map. The layout
+/// of those extracted bytes is:
 ///
 ///   Offset 0-5:   MAC address (6 bytes, correct order)
-///   Offset 6-7:   Temperature sint16 LE (divide by 100)
-///   Offset 8-9:   Humidity uint16 LE (divide by 100)
-///   Offset 10-11: Battery voltage uint16 LE (mV)
-///   Offset 12:    Battery level uint8 (0-100%)
-///   (Optional: frame counter and flags may follow at offset 13+, but
-///    FlutterBluePlus may strip trailing bytes — we only require 13.)
+///   Offset 6-7:   Temperature int16 BIG ENDIAN (deci-Celsius, /10)
+///   Offset 8:     Humidity uint8 (0-100%)
+///   Offset 9:     Battery level uint8 (0-100%)
+///   Offset 10-11: Battery voltage uint16 BIG ENDIAN (mV)
+///   Offset 12:    Frame counter uint8
 ///
 /// Every packet contains temperature + humidity + battery, so unlike ATC
 /// original firmware there are no lifecycle-only packets — every broadcast
 /// is a valid Reading.
 class CustomFirmwareParser {
   /// Minimum service data length for a valid custom firmware packet.
-  /// FlutterBluePlus extracts service data starting after the UUID bytes,
-  /// so the actual bytes are: MAC(6) + temp(2) + humidity(1) + bat%(1) +
+  /// FlutterBluePlus extracts: MAC(6) + temp(2) + humidity(1) + bat%(1) +
   /// mV(2) + counter(1) = 13 bytes.
   static const int _minDataLength = 13;
 
@@ -51,27 +50,19 @@ class CustomFirmwareParser {
 
     final byteData = Uint8List.fromList(serviceData).buffer.asByteData();
 
-    // Debug: log raw bytes to verify offsets
-    DebugLogger().d(
-        'CustomFirmware raw bytes (${serviceData.length}): '
-        '${serviceData.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')} '
-        'for $deviceId',
-        tag: 'CustomFirmware');
+    // Offset 6-7: Temperature int16 BIG ENDIAN (deci-Celsius, /10)
+    final tempRaw = byteData.getInt16(6, Endian.big);
+    final temperature = tempRaw / 10.0;
 
-    // Offset 6-7: Temperature sint16 LE (/100)
-    final tempRaw = byteData.getInt16(6, Endian.little);
-    final temperature = tempRaw / 100.0;
+    // Offset 8: Humidity uint8 (0-100%)
+    final humidity = (serviceData[8]).toDouble();
 
-    // Offset 8-9: Humidity uint16 LE (/100)
-    final humidityRaw = byteData.getUint16(8, Endian.little);
-    final humidity = humidityRaw / 100.0;
+    // Offset 9: Battery level uint8 (0-100%)
+    final battery = serviceData[9];
 
-    // Offset 10-11: Battery voltage uint16 LE (mV)
+    // Offset 10-11: Battery voltage uint16 BIG ENDIAN (mV)
     // (not used in Reading model but parsed for completeness)
-    // final batteryMv = byteData.getUint16(10, Endian.little);
-
-    // Offset 12: Battery level uint8 (0-100%)
-    final battery = serviceData[12];
+    // final batteryMv = byteData.getUint16(10, Endian.big);
 
     // Validate physical bounds.
     if (temperature < _minTemp || temperature > _maxTemp) {
