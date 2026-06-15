@@ -38,7 +38,7 @@ class DashboardPage extends StatelessWidget {
                 children: [
                   // Full-width PageView for device cards
                   SizedBox(
-                    height: 96,
+                    height: 120,
                     child: PageView.builder(
                       controller: PageController(viewportFraction: 1.0),
                       itemCount: state.devices.length,
