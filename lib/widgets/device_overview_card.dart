@@ -66,7 +66,9 @@ class DeviceOverviewCard extends StatelessWidget {
                 _dataRow(
                   context,
                   label: '电池',
-                  value: reading?.battery?.toString() ?? '--',
+                  value: reading?.battery != null
+                      ? '${reading!.battery}%'
+                      : '--%',
                 ),
                 const SizedBox(height: 6),
                 _dataRow(
