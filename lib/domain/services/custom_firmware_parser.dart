@@ -23,8 +23,8 @@ import 'package:temp_monitor/infrastructure/debug_logger.dart';
 class CustomFirmwareParser {
   /// Minimum service data length for a valid custom firmware packet.
   /// FlutterBluePlus extracts service data starting after the UUID bytes,
-  /// so the actual bytes are: MAC(6) + temp(2) + humidity(2) + mV(2) +
-  /// battery(1) + counter(1) + flags(1) = 15 total - 2 UUID bytes = 13.
+  /// so the actual bytes are: MAC(6) + temp(2) + humidity(1) + bat%(1) +
+  /// mV(2) + counter(1) = 13 bytes.
   static const int _minDataLength = 13;
 
   // Physical sanity bounds — matches BThomeParser constants.
@@ -50,6 +50,13 @@ class CustomFirmwareParser {
     }
 
     final byteData = Uint8List.fromList(serviceData).buffer.asByteData();
+
+    // Debug: log raw bytes to verify offsets
+    DebugLogger().d(
+        'CustomFirmware raw bytes (${serviceData.length}): '
+        '${serviceData.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')} '
+        'for $deviceId',
+        tag: 'CustomFirmware');
 
     // Offset 6-7: Temperature sint16 LE (/100)
     final tempRaw = byteData.getInt16(6, Endian.little);
