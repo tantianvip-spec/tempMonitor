@@ -10,14 +10,6 @@ class SensorRepository {
 
   SensorRepository(this._db);
 
-  /// Internal constructor for testing subclasses that don't use a real DB.
-  /// Subclasses must override all methods that access [_db].
-  SensorRepository._internal() : _db = _unusedDb();
-
-  static AppDatabase _unusedDb() {
-    throw UnimplementedError('Use a real AppDatabase or override methods');
-  }
-
   Stream<List<domain.Device>> watchAllDevices() {
     final query = _db.select(_db.devices)
       ..orderBy([

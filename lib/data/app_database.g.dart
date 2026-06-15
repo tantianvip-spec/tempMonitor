@@ -2,7 +2,7 @@
 
 part of 'app_database.dart';
 
-// ignore_for_file: type=lint
+// ignore_for_file: type=lint, unnecessary_null_comparison, unnecessary_non_null_assertion
 class $DevicesTable extends Devices with TableInfo<$DevicesTable, Device> {
   @override
   final GeneratedDatabase attachedDatabase;
