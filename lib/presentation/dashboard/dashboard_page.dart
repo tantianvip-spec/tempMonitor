@@ -11,7 +11,7 @@ import 'package:temp_monitor/widgets/current_reading_card.dart';
 class DashboardPage extends StatelessWidget {
   final String deviceId;
 
-  const DashboardPage({super.key, required this.deviceId});
+  const DashboardPage({super.key, this.deviceId = ''});
 
   @override
   Widget build(BuildContext context) {
