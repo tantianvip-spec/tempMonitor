@@ -9,4 +9,9 @@ abstract class AppConstants {
   static const double defaultHumidityMax = 80.0;
   static const int maxLogEntries = 1000;
   static const String uiIsolatePortName = 'temp_monitor_ui_port';
+
+  /// App version injected at build time via --dart-define=APP_VERSION=...
+  /// Falls back to 'dev' for local development.
+  static const String appVersion =
+      String.fromEnvironment('APP_VERSION', defaultValue: 'dev');
 }
