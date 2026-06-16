@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:temp_monitor/core/theme.dart';
 import 'package:temp_monitor/presentation/settings/settings_cubit.dart';
 import 'package:temp_monitor/widgets/threshold_editor.dart';
@@ -137,6 +138,27 @@ class SettingsPage extends StatelessWidget {
                 activeColor: AppTheme.accentSuccess,
                 onChanged: (value) =>
                     context.read<SettingsCubit>().setMockDeviceEnabled(value),
+              ),
+              const SizedBox(height: 8),
+              // App version footer
+              FutureBuilder<PackageInfo>(
+                future: PackageInfo.fromPlatform(),
+                builder: (context, snapshot) {
+                  final version = snapshot.data?.version ?? '--';
+                  final build = snapshot.data?.buildNumber ?? '--';
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 24),
+                    child: Center(
+                      child: Text(
+                        'v$version ($build)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textMuted(context),
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ],
           );
