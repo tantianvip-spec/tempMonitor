@@ -90,8 +90,12 @@ on:
 ```yaml
       - name: Verify generated files are up-to-date
         run: |
-          echo "Checking that drift generated files are committed and match source..."
-          git diff --exit-code
+          echo "Checking that generated files are committed and match source..."
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Uncommitted or out-of-date generated files detected:"
+            git status --porcelain
+            exit 1
+          fi
 ```
 
 - [ ] **Step 3: 在 `release-build` job 中同样增加一致性校验**
@@ -108,8 +112,12 @@ on:
 ```yaml
       - name: Verify generated files are up-to-date
         run: |
-          echo "Checking that drift generated files are committed and match source..."
-          git diff --exit-code
+          echo "Checking that generated files are committed and match source..."
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Uncommitted or out-of-date generated files detected:"
+            git status --porcelain
+            exit 1
+          fi
 ```
 
 - [ ] **Step 4: 提交变更**
@@ -121,7 +129,7 @@ git commit -m "ci: expand trigger branches and verify .g.dart consistency
 
 - Trigger build on feat/*, fix/*, hotfix/* pushes
 - Trigger build on PRs to implement branch
-- Add git diff --exit-code check after build_runner to ensure generated files are committed"
+- Add git status --porcelain check after build_runner to ensure generated files are committed"
 ```
 
 ---
@@ -140,14 +148,12 @@ git commit -m "ci: expand trigger branches and verify .g.dart consistency
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Check PR title format
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          TITLE="${{ github.event.pull_request.title }}"
-          echo "PR title: $TITLE"
-          if echo "$TITLE" | grep -qE '^(feat|fix|refactor|test|docs|ci|chore)(\([^)]+\))?: .+'; then
+          printf 'PR title: %s\n' "$PR_TITLE"
+          if printf '%s\n' "$PR_TITLE" | grep -qE '^(feat|fix|refactor|test|docs|ci|chore|build|perf|style|revert)(\([^)]+\))?!?: .+'; then
             echo "PR title format OK"
           else
             echo "PR title must follow '<type>(<scope>): <subject>'"
@@ -158,7 +164,6 @@ git commit -m "ci: expand trigger branches and verify .g.dart consistency
         if: github.base_ref == 'master'
         run: |
           echo "Target branch is master; ensure pubspec.yaml version is updated if needed."
-          # This is a reminder check; it does not fail the job automatically.
           echo "Manual check required: has pubspec.yaml version been bumped?"
 ```
 

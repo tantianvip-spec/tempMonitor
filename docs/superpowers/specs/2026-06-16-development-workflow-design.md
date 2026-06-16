@@ -135,12 +135,18 @@ flutter analyze --no-fatal-warnings
 
 ### 4.3 生成文件一致性检查（CI 执行）
 
-```bash
-dart run build_runner build --delete-conflicting-outputs
-git diff --exit-code
+```yaml
+- name: Verify generated files are up-to-date
+  run: |
+    echo "Checking that generated files are committed and match source..."
+    if [ -n "$(git status --porcelain)" ]; then
+      echo "Uncommitted or out-of-date generated files detected:"
+      git status --porcelain
+      exit 1
+    fi
 ```
 
-如果 `.g.dart` 与源文件不一致，CI 失败。
+如果 `.g.dart` 与源文件不一致或生成文件未提交，CI 失败。
 
 ### 4.4 集成测试（真机/模拟器）
 
@@ -175,8 +181,8 @@ git diff --exit-code
 
 ```yaml
 触发:
-  push: [feat/*, fix/*, implement]
-  pull_request: [implement, master]
+  push: [master, implement, 'feat/**', 'fix/**', 'hotfix/**']
+  pull_request: [master, implement]
 
 步骤:
   1. checkout
