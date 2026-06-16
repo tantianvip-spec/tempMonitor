@@ -70,9 +70,9 @@ Expected: 无 diff，命令退出码为 0。
 ```yaml
 on:
   push:
-    branches: [main, master, implement, 'feat/**', 'fix/**', 'hotfix/**']
+    branches: [master, implement, 'feat/**', 'fix/**', 'hotfix/**']
   pull_request:
-    branches: [main, master, implement]
+    branches: [master, implement]
   workflow_dispatch:
 ```
 
@@ -268,6 +268,10 @@ git commit -m "docs: add pull request template
 **Files:**
 - 仓库设置（GitHub Web UI），无代码文件变更
 
+> **Note:** 本任务仅通过 GitHub Web UI 配置，不修改仓库代码文件。
+
+> **Status check prerequisite:** GitHub only shows status checks in the dropdown after they have run at least once on the target branch. If `build` or `pr-checklist` are not visible when configuring the rule, open a test PR against the target branch first so the checks appear in the UI.
+
 - [ ] **Step 1: 为 `master` 分支启用保护规则**
 
 在 GitHub 仓库页面操作：
@@ -281,6 +285,8 @@ git commit -m "docs: add pull request template
      - 搜索并勾选 `pr-checklist`
    - `Require branches to be up to date before merging`
    - `Restrict pushes that create files larger than 100 MB`
+   - `Block force pushes`
+   - `Do not allow bypassing the above settings`
 4. 保存
 
 - [ ] **Step 2: 为 `implement` 分支启用保护规则**
@@ -292,7 +298,10 @@ git commit -m "docs: add pull request template
    - `Require status checks to pass before merging`
      - 搜索并勾选 `build`
    - `Require branches to be up to date before merging`
+   - `Restrict pushes that create files larger than 100 MB`
 4. 保存
+
+> **Note on `pr-checklist`:** The `pr-checklist` job enforces the conventional commit style in the PR title. The version-bump step for `master`-bound PRs is a non-blocking reminder; it logs a message and does not fail the job.
 
 - [ ] **Step 3: 记录分支保护配置**
 
