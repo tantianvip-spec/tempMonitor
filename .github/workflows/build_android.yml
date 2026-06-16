@@ -84,6 +84,28 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  pr-checklist:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Check PR title format
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf 'PR title: %s\n' "$PR_TITLE"
+          if printf '%s\n' "$PR_TITLE" | grep -qE '^(feat|fix|refactor|test|docs|ci|chore|build|perf|style|revert)(\([^)]+\))?!?: .+'; then
+            echo "PR title format OK"
+          else
+            echo "PR title must follow '<type>(<scope>): <subject>'"
+            exit 1
+          fi
+
+      - name: Check version bump for master-bound PRs
+        if: github.base_ref == 'master'
+        run: |
+          echo "Target branch is master; ensure pubspec.yaml version is updated if needed."
+          echo "Manual check required: has pubspec.yaml version been bumped?"
+
   release-build:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master'
