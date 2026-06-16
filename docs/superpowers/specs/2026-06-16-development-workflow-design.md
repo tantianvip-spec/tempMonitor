@@ -297,7 +297,11 @@ flutter analyze --no-fatal-warnings
 ```bash
 # 生成文件一致性校验
 dart run build_runner build --delete-conflicting-outputs
-git diff --exit-code
+if [ -n "$(git status --porcelain)" ]; then
+  echo "Uncommitted or out-of-date generated files detected:"
+  git status --porcelain
+  exit 1
+fi
 
 # 静态分析
 flutter analyze --no-fatal-warnings
