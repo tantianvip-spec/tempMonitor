@@ -172,7 +172,7 @@ flutter analyze --no-fatal-warnings
 
 在 `.github/workflows/build_android.yml` 基础上扩展：
 
-1. `build` job 增加 `git diff --exit-code` 检查生成文件一致性。
+1. `build` job 增加生成文件一致性检查（使用 `git status --porcelain` 检测修改和未跟踪文件）。
 2. `build` job 增加 PR 触发到 `implement` 分支。
 3. 新增 `pr-checklist` job（可选），校验 PR 描述和版本号。
 4. `release-build` job 增加集成测试占位步骤（`continue-on-error: true`）。
@@ -190,7 +190,7 @@ flutter analyze --no-fatal-warnings
   3. setup Flutter 3.22.0
   4. flutter pub get
   5. dart run build_runner build --delete-conflicting-outputs
-  6. git diff --exit-code        # 校验 .g.dart 一致性
+  6. git status --porcelain      # 校验 .g.dart 一致性（含未跟踪文件）
   7. flutter analyze --no-fatal-warnings
   8. flutter test --dart-define=APP_VERSION=<version>
   9. flutter build apk --debug --dart-define=APP_VERSION=<version>
@@ -209,7 +209,7 @@ flutter analyze --no-fatal-warnings
   3. setup JDK 17 + Flutter 3.22.0
   4. flutter pub get
   5. dart run build_runner build --delete-conflicting-outputs
-  6. git diff --exit-code
+  6. git status --porcelain
   7. flutter analyze --no-fatal-warnings
   8. flutter test --dart-define=APP_VERSION=<version>
   9. decode keystore + create key.properties
