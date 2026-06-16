@@ -79,7 +79,7 @@ class BackgroundService {
         // FOREGROUND_SERVICE_TYPE_MANIFEST is deprecated and may cause
         // startForeground() to fail silently, leading to
         // ForegroundServiceDidNotStartInTimeException.
-        foregroundServiceTypes: [AndroidForegroundType.location],
+        foregroundServiceTypes: [AndroidForegroundType.dataSync],
       ),
       iosConfiguration: IosConfiguration(
         autoStart: false,
