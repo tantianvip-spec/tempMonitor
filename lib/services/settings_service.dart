@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:temp_monitor/core/constants.dart';
 
@@ -8,6 +9,29 @@ class SettingsService {
     _prefs = await SharedPreferences.getInstance();
   }
 
+  // ── Theme mode ───────────────────────────────────────────────
+  ThemeMode getThemeMode() {
+    final raw = _prefs.getString('theme_mode');
+    switch (raw) {
+      case 'light':
+        return ThemeMode.light;
+      case 'dark':
+        return ThemeMode.dark;
+      default:
+        return ThemeMode.system;
+    }
+  }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    final raw = switch (mode) {
+      ThemeMode.light => 'light',
+      ThemeMode.dark => 'dark',
+      _ => 'system',
+    };
+    await _prefs.setString('theme_mode', raw);
+  }
+
+  // ── Scan & storage ───────────────────────────────────────────
   int getScanIntervalSeconds() {
     return _prefs.getInt('scan_interval_seconds') ??
         AppConstants.defaultScanIntervalSeconds;

@@ -21,7 +21,22 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration {
+    return MigrationStrategy(
+      onCreate: (m) => m.createAll(),
+      onUpgrade: (m, from, to) async {
+        if (from < 2) {
+          // Version 2: temperature and humidity became nullable.
+          // SQLite ALTER TABLE doesn't support dropping NOT NULL on a column,
+          // so we recreate the table.
+          await m.alterTable(TableMigration(readings));
+        }
+      },
+    );
+  }
 
   static QueryExecutor _openConnection() {
     return driftDatabase(name: 'temp_monitor_database');

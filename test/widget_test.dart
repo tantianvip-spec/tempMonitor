@@ -9,6 +9,7 @@ import 'package:temp_monitor/app.dart';
 import 'package:temp_monitor/data/app_database.dart';
 import 'package:temp_monitor/infrastructure/notification_service.dart';
 import 'package:temp_monitor/repositories/sensor_repository.dart';
+import 'package:temp_monitor/services/scan_service.dart';
 import 'package:temp_monitor/services/settings_service.dart';
 
 void main() {
@@ -28,6 +29,11 @@ void main() {
     final settings = SettingsService();
     await settings.initialize();
     final notifications = NotificationService();
+    final scanService = ScanService(
+      repository: repo,
+      settings: settings,
+      notifications: notifications,
+    );
     // Skip notifications.initialize() — flutter_local_notifications needs
     // platform binding for plugin registration. The widget tree doesn't
     // depend on the plugin being initialized for the boot smoke test.
@@ -36,6 +42,7 @@ void main() {
       repository: repo,
       settings: settings,
       notifications: notifications,
+      scanService: scanService,
     ));
     await tester.pumpAndSettle();
 
@@ -44,5 +51,6 @@ void main() {
     expect(find.text('调试'), findsOneWidget);
 
     await db.close();
+    scanService.dispose();
   });
 }

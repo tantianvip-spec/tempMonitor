@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:temp_monitor/domain/models/reading.dart';
+import 'package:temp_monitor/presentation/history/history_enums.dart';
 import 'package:temp_monitor/repositories/sensor_repository.dart';
 
 class HistoryCubit extends Cubit<HistoryState> {
@@ -37,10 +38,6 @@ class HistoryCubit extends Cubit<HistoryState> {
     }
   }
 }
-
-enum HistoryStatus { initial, loading, loaded, error }
-
-enum HistoryRange { day, week, month }
 
 class HistoryState extends Equatable {
   final HistoryStatus status;

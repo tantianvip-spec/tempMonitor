@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:provider/provider.dart';
 import 'package:temp_monitor/core/theme.dart';
 import 'package:temp_monitor/domain/models/reading.dart';
 import 'package:temp_monitor/infrastructure/notification_service.dart';
+import 'package:temp_monitor/presentation/dashboard/dashboard_cubit.dart';
+import 'package:temp_monitor/presentation/dashboard/dashboard_page.dart';
 import 'package:temp_monitor/presentation/debug/debug_log_cubit.dart';
 import 'package:temp_monitor/presentation/debug/debug_log_page.dart';
 import 'package:temp_monitor/presentation/devices/devices_page.dart';
 import 'package:temp_monitor/presentation/settings/settings_cubit.dart';
 import 'package:temp_monitor/presentation/settings/settings_page.dart';
 import 'package:temp_monitor/repositories/sensor_repository.dart';
+import 'package:temp_monitor/services/scan_service.dart';
 import 'package:temp_monitor/services/settings_service.dart';
 
 class TempMonitorApp extends StatelessWidget {
@@ -16,12 +20,14 @@ class TempMonitorApp extends StatelessWidget {
   final SettingsService settings;
   final NotificationService notifications;
   final Stream<Reading>? readingStream;
+  final ScanService scanService;
 
   const TempMonitorApp({
     super.key,
     required this.repository,
     required this.settings,
     required this.notifications,
+    required this.scanService,
     this.readingStream,
   });
 
@@ -32,19 +38,24 @@ class TempMonitorApp extends StatelessWidget {
         RepositoryProvider.value(value: repository),
         RepositoryProvider.value(value: settings),
         RepositoryProvider.value(value: notifications),
+        RepositoryProvider.value(value: scanService),
         if (readingStream != null)
-          RepositoryProvider<Stream<Reading>>.value(value: readingStream!),
+          Provider<Stream<Reading>>.value(value: readingStream!),
       ],
       child: MultiBlocProvider(
         providers: [
-          BlocProvider(create: (_) => SettingsCubit(settings)),
+          BlocProvider(create: (_) => SettingsCubit(settings, scanService)),
         ],
-        child: MaterialApp(
-          title: '温湿度监控',
-          theme: AppTheme.darkTheme(),
-          darkTheme: AppTheme.darkTheme(),
-          themeMode: ThemeMode.dark,
-          home: const MainNavigationScreen(),
+        child: BlocBuilder<SettingsCubit, SettingsState>(
+          builder: (context, state) {
+            return MaterialApp(
+              title: '温湿度监控',
+              theme: AppTheme.lightTheme(),
+              darkTheme: AppTheme.darkTheme(),
+              themeMode: state.themeMode,
+              home: const MainNavigationScreen(),
+            );
+          },
         ),
       ),
     );
@@ -63,7 +74,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final repository = context.read<SensorRepository>();
+    Stream<Reading>? readingStream;
+    try {
+      readingStream = Provider.of<Stream<Reading>>(context, listen: false);
+    } catch (_) {}
+
     final pages = [
+      BlocProvider(
+        create: (_) => DashboardCubit(
+          repository,
+          readingStream: readingStream,
+        ),
+        child: const DashboardPage(),
+      ),
       const DevicesPage(),
       const SettingsPage(),
       BlocProvider(
@@ -76,9 +100,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       body: IndexedStack(index: _currentIndex, children: pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
-        onDestinationSelected: (index) => setState(() => _currentIndex = index),
+        onDestinationSelected: (index) =>
+            setState(() => _currentIndex = index),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.dashboard), label: '设备'),
+          NavigationDestination(icon: Icon(Icons.dashboard), label: '仪表盘'),
+          NavigationDestination(icon: Icon(Icons.devices), label: '设备'),
           NavigationDestination(icon: Icon(Icons.settings), label: '设置'),
           NavigationDestination(icon: Icon(Icons.bug_report), label: '调试'),
         ],

@@ -2,32 +2,84 @@ import 'dart:async';
 import 'dart:isolate';
 import 'dart:ui';
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:temp_monitor/core/constants.dart';
-// drift generates a `Reading` row class that collides with our domain model.
-import 'package:temp_monitor/data/app_database.dart' hide Reading;
-import 'package:temp_monitor/domain/models/reading.dart';
-import 'package:temp_monitor/domain/services/threshold_engine.dart';
-import 'package:temp_monitor/infrastructure/ble_scanner.dart';
 import 'package:temp_monitor/infrastructure/debug_logger.dart';
-import 'package:temp_monitor/infrastructure/mock_sensor.dart';
-import 'package:temp_monitor/infrastructure/notification_service.dart';
-import 'package:temp_monitor/repositories/sensor_repository.dart';
-import 'package:temp_monitor/services/settings_service.dart';
 
+/// Manages a persistent foreground service that keeps the Android process
+/// alive so the main isolate's BLE scanning Timer continues to fire even
+/// when the app is backgrounded.
+///
+/// This service runs in its own Dart isolate but does NOT perform any BLE
+/// scanning — all scanning happens in the main isolate via [ScanService].
+/// The background isolate only sends periodic heartbeats (`null` messages)
+/// to the main isolate to confirm the process is alive.
 class BackgroundService {
+  static const int _notificationId = 888;
+  static const String _channelId = 'temp_monitor_service';
+  static const String _channelName = '温湿度监控服务';
+  static const String _channelDesc = '后台服务运行中';
+  static bool _configured = false;
+
+  /// Whether the background service was successfully configured and is
+  /// available for use. Check before calling [start] if you need a
+  /// fallback path.
+  static bool get isAvailable => _configured;
+
+  /// Initialize the background service configuration.
+  /// This must be called once during app startup (before [start]).
+  ///
+  /// Pre-creates the notification channel via flutter_local_notifications
+  /// so the background service plugin's Java code can use it immediately
+  /// in onCreate() without needing to auto-create "FOREGROUND_DEFAULT".
+  /// This avoids a race condition where SharedPreferences may not have
+  /// been flushed before the service reads them.
   static Future<void> initialize() async {
+    if (_configured) return;
+
+    // Pre-create the notification channel so the plugin's Java
+    // BackgroundService.onCreate() finds it already exists. This is
+    // critical on Android 15+ (API 35) where FOREGROUND_SERVICE_TYPE_MANIFEST
+    // is deprecated: if the plugin's SharedPreferences read returns null
+    // for foreground_service_types (which can happen due to apply()'s
+    // async write), it falls back to the deprecated type and
+    // startForeground() is silently rejected, causing the 5-second
+    // ForegroundServiceDidNotStartInTimeException crash.
+    final androidPlugin = FlutterLocalNotificationsPlugin()
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    if (androidPlugin != null) {
+      const channel = AndroidNotificationChannel(
+        _channelId,
+        _channelName,
+        description: _channelDesc,
+        importance: Importance.low,
+      );
+      await androidPlugin.createNotificationChannel(channel);
+    }
+
     final service = FlutterBackgroundService();
     await service.configure(
       androidConfiguration: AndroidConfiguration(
         onStart: onStart,
         autoStart: false,
         isForegroundMode: true,
-        notificationChannelId: 'temp_monitor_service',
+        // Use a pre-created channel so the plugin's Java code skips
+        // auto-creating "FOREGROUND_DEFAULT" in onCreate(). A custom
+        // channel ID forces the plugin to trust the app has created it,
+        // avoiding the race between channel creation and startForeground().
+        notificationChannelId: _channelId,
         initialNotificationTitle: '温湿度监控',
         initialNotificationContent: '正在后台监听设备...',
-        foregroundServiceNotificationId: 888,
+        foregroundServiceNotificationId: _notificationId,
+        // Explicitly declare dataSync so the plugin's Java code passes
+        // FOREGROUND_SERVICE_TYPE_DATA_SYNC (0x08) to ServiceCompat.startForeground()
+        // instead of FOREGROUND_SERVICE_TYPE_MANIFEST (0x01). On Android 16, passing
+        // 0x01 when the manifest declares dataSync (0x08) causes:
+        //   IllegalArgumentException: foregroundServiceType 0x01 is not a subset of 0x08
+        foregroundServiceTypes: [AndroidForegroundType.dataSync],
       ),
       iosConfiguration: IosConfiguration(
         autoStart: false,
@@ -35,117 +87,117 @@ class BackgroundService {
         onBackground: onIosBackground,
       ),
     );
+    _configured = true;
   }
 
+  /// Start the foreground service.
+  static Future<void> start() async {
+    if (!_configured) return;
+    final service = FlutterBackgroundService();
+    await service.startService();
+  }
+
+  /// Stop the foreground service.
+  static void stop() {
+    if (!_configured) return;
+    try {
+      final service = FlutterBackgroundService();
+      service.invoke('stopService');
+    } catch (_) {}
+  }
+
+  /// Send updated settings to the running background service.
+  static void updateSettings() {
+    if (!_configured) return;
+    try {
+      final service = FlutterBackgroundService();
+      service.invoke('updateSettings');
+    } catch (_) {}
+  }
+
+  @pragma('vm:entry-point')
   static Future<bool> onIosBackground(ServiceInstance service) async {
     WidgetsFlutterBinding.ensureInitialized();
     DartPluginRegistrant.ensureInitialized();
     return true;
   }
 
+  @pragma('vm:entry-point')
   static void onStart(ServiceInstance service) async {
-    DartPluginRegistrant.ensureInitialized();
+    try {
+      DartPluginRegistrant.ensureInitialized();
 
-    final settings = SettingsService();
-    await settings.initialize();
-
-    final db = AppDatabase();
-    final repository = SensorRepository(db);
-    final scanner = BleScanner();
-    final mockSensor = MockSensor();
-    final notifications = NotificationService();
-    await notifications.initialize();
-
-    ThresholdEngine createEngine() => ThresholdEngine(
-          tempMin: settings.getTempMin(),
-          tempMax: settings.getTempMax(),
-          humidityMin: settings.getHumidityMin(),
-          humidityMax: settings.getHumidityMax(),
+      // Show the foreground service notification so Android keeps the
+      // process alive.
+      if (service is AndroidServiceInstance) {
+        service.setForegroundNotificationInfo(
+          title: '温湿度监控',
+          content: '正在后台监听设备...',
         );
-
-    var thresholdEngine = createEngine();
-
-    // The UI side registers a ReceivePort under this name on launch.
-    // Look it up lazily and re-lookup each tick in case the UI was
-    // hot-restarted and re-registered the port.
-    SendPort? uiPort =
-        IsolateNameServer.lookupPortByName(AppConstants.uiIsolatePortName);
-
-    // Processes a single Reading: persist, push to UI, fire notification
-    // on a newly-breached threshold. Shared by both mock and real paths
-    // so mock mode is functionally equivalent to a live device.
-    Future<void> handleReading(Reading reading) async {
-      await repository.saveReading(reading);
-      uiPort ??=
-          IsolateNameServer.lookupPortByName(AppConstants.uiIsolatePortName);
-      uiPort?.send(reading);
-
-      final state = thresholdEngine.evaluate(
-        temperature: reading.temperature,
-        humidity: reading.humidity,
-      );
-
-      if (state.justBecameBreached) {
-        await notifications.showAlert(
-          title: '温湿度告警',
-          body:
-              '温度 ${reading.temperature}°C / 湿度 ${reading.humidity}% 超出设定范围',
-        );
+        await service.setAsForegroundService();
       }
-    }
 
-    Timer? scanTimer;
-    StreamSubscription<Reading>? mockSubscription;
+      DebugLogger().i(
+          'Background service started — process keepalive only, '
+          'BLE scanning runs in main isolate',
+          tag: 'BackgroundService');
 
-    void cancelAll() {
-      scanTimer?.cancel();
-      scanTimer = null;
-      mockSubscription?.cancel();
-      mockSubscription = null;
-    }
+      // The UI isolate registers a ReceivePort under this name when it
+      // starts. Look it up each tick so a UI hot-restart (which
+      // re-registers) is picked up.
+      SendPort? uiPort;
 
-    void startScanning() {
-      cancelAll();
-      final interval = Duration(seconds: settings.getScanIntervalSeconds());
+      // Send a heartbeat every 5 minutes to confirm the process is alive.
+      // The heartbeat interval is fixed (not tied to the scan interval)
+      // because this is purely a process-liveness signal.
+      const heartbeatInterval = Duration(seconds: 300);
+      Timer? heartbeatTimer;
 
-      if (settings.getMockDeviceEnabled()) {
-        DebugLogger().i('Starting mock sensor stream', tag: 'BackgroundService');
-        mockSubscription = mockSensor
-            .readings(deviceId: 'mock-device', interval: interval)
-            .listen((reading) async {
-          try {
-            await handleReading(reading);
-          } catch (e) {
-            DebugLogger()
-                .e('Mock handler error: $e', tag: 'BackgroundService');
+      void startHeartbeat() {
+        heartbeatTimer?.cancel();
+        DebugLogger().i(
+            'Heartbeat every ${heartbeatInterval.inSeconds}s',
+            tag: 'BackgroundService');
+
+        // Send first heartbeat immediately to confirm alive at startup.
+        uiPort ??= IsolateNameServer.lookupPortByName(
+            AppConstants.uiIsolatePortName);
+        uiPort?.send(null);
+
+        heartbeatTimer = Timer.periodic(heartbeatInterval, (_) {
+          uiPort ??= IsolateNameServer.lookupPortByName(
+              AppConstants.uiIsolatePortName);
+          if (uiPort != null) {
+            uiPort!.send(null);
+            DebugLogger().v('Heartbeat sent', tag: 'BackgroundService');
+          } else {
+            DebugLogger().v(
+                'Heartbeat skipped — no uiPort registered',
+                tag: 'BackgroundService');
           }
         });
-        return;
       }
 
-      scanTimer = Timer.periodic(interval, (_) async {
-        try {
-          await for (final reading
-              in scanner.scan(timeout: const Duration(seconds: 2))) {
-            await handleReading(reading);
-          }
-        } catch (e) {
-          DebugLogger()
-              .e('Background scan error: $e', tag: 'BackgroundService');
-        }
+      service.on('stopService').listen((event) {
+        DebugLogger().i(
+            'Background service stopping', tag: 'BackgroundService');
+        heartbeatTimer?.cancel();
+        service.stopSelf();
       });
+
+      service.on('updateSettings').listen((event) {
+        DebugLogger().i(
+            'Background service updateSettings received (heartbeat unchanged)',
+            tag: 'BackgroundService');
+        // Heartbeat interval is fixed; nothing to re-read.
+      });
+
+      startHeartbeat();
+    } catch (e, s) {
+      DebugLogger().e(
+        'BackgroundService onStart error: $e\n$s',
+        tag: 'BackgroundService',
+      );
     }
-
-    service.on('stopService').listen((event) {
-      cancelAll();
-      service.stopSelf();
-    });
-
-    service.on('updateSettings').listen((event) {
-      thresholdEngine = createEngine();
-      startScanning();
-    });
-
-    startScanning();
   }
 }

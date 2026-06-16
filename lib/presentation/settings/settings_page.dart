@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:temp_monitor/core/constants.dart';
 import 'package:temp_monitor/core/theme.dart';
 import 'package:temp_monitor/presentation/settings/settings_cubit.dart';
 import 'package:temp_monitor/widgets/threshold_editor.dart';
@@ -26,9 +27,11 @@ class SettingsPage extends StatelessWidget {
                   value: state.scanIntervalSeconds,
                   underline: const SizedBox(),
                   items: const [
-                    DropdownMenuItem(value: 1, child: Text('1 秒（高耗电）')),
-                    DropdownMenuItem(value: 2, child: Text('2 秒')),
-                    DropdownMenuItem(value: 5, child: Text('5 秒（默认）')),
+                    DropdownMenuItem(value: 5, child: Text('5 秒')),
+                    DropdownMenuItem(value: 30, child: Text('30 秒')),
+                    DropdownMenuItem(value: 60, child: Text('1 分钟')),
+                    DropdownMenuItem(value: 300, child: Text('5 分钟（推荐）')),
+                    DropdownMenuItem(value: 600, child: Text('10 分钟')),
                   ],
                   onChanged: (value) {
                     if (value != null) {
@@ -105,6 +108,28 @@ class SettingsPage extends StatelessWidget {
                 },
               ),
               const Divider(indent: 16, endIndent: 16),
+              const _SectionHeader(title: '外观'),
+              ListTile(
+                title: const Text('主题'),
+                subtitle: Text(_themeLabel(state.themeMode)),
+                trailing: DropdownButton<ThemeMode>(
+                  value: state.themeMode,
+                  underline: const SizedBox(),
+                  items: const [
+                    DropdownMenuItem(
+                        value: ThemeMode.system, child: Text('跟随系统')),
+                    DropdownMenuItem(
+                        value: ThemeMode.light, child: Text('浅色')),
+                    DropdownMenuItem(value: ThemeMode.dark, child: Text('深色')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      context.read<SettingsCubit>().setThemeMode(value);
+                    }
+                  },
+                ),
+              ),
+              const Divider(indent: 16, endIndent: 16),
               const _SectionHeader(title: '开发'),
               SwitchListTile(
                 title: const Text('模拟设备模式'),
@@ -113,6 +138,20 @@ class SettingsPage extends StatelessWidget {
                 activeColor: AppTheme.accentSuccess,
                 onChanged: (value) =>
                     context.read<SettingsCubit>().setMockDeviceEnabled(value),
+              ),
+              const SizedBox(height: 8),
+              // App version footer
+              Padding(
+                padding: const EdgeInsets.only(bottom: 24),
+                child: Center(
+                  child: Text(
+                    'v${AppConstants.appVersion}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textMuted(context),
+                    ),
+                  ),
+                ),
               ),
             ],
           );
@@ -155,13 +194,21 @@ class _SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
       child: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: AppTheme.textMuted,
+          color: AppTheme.textMuted(context),
           letterSpacing: 0.5,
         ),
       ),
     );
   }
+}
+
+String _themeLabel(ThemeMode mode) {
+  return switch (mode) {
+    ThemeMode.system => '跟随系统',
+    ThemeMode.light => '浅色',
+    ThemeMode.dark => '深色',
+  };
 }

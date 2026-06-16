@@ -13,8 +13,8 @@ class Devices extends Table {
 class Readings extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get deviceId => text().references(Devices, #id)();
-  RealColumn get temperature => real()();
-  RealColumn get humidity => real()();
+  RealColumn get temperature => real().nullable()();
+  RealColumn get humidity => real().nullable()();
   IntColumn get battery => integer().nullable()();
   IntColumn get rssi => integer().nullable()();
   IntColumn get recordedAt => integer()();

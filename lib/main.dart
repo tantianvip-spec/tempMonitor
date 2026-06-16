@@ -1,21 +1,53 @@
-import 'dart:isolate';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:temp_monitor/app.dart';
-import 'package:temp_monitor/core/constants.dart';
 import 'package:temp_monitor/data/app_database.dart' hide Reading;
-import 'package:temp_monitor/domain/models/reading.dart';
 import 'package:temp_monitor/infrastructure/background_service.dart';
 import 'package:temp_monitor/infrastructure/debug_logger.dart';
+import 'package:temp_monitor/infrastructure/permission_service.dart';
 import 'package:temp_monitor/infrastructure/notification_service.dart';
 import 'package:temp_monitor/repositories/sensor_repository.dart';
+import 'package:temp_monitor/services/scan_service.dart';
 import 'package:temp_monitor/services/settings_service.dart';
 
 void main() async {
+  // Catch and log ALL errors — including widget-layer crashes — so we
+  // can see what's going wrong even if the app keeps crashing.
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    DebugLogger().e(
+      'FlutterError: ${details.exception}\n${details.stack}',
+      tag: 'App',
+    );
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    DebugLogger().e('Platform error: $error\n$stack', tag: 'App');
+    return true;
+  };
+
   WidgetsFlutterBinding.ensureInitialized();
 
-  final database = AppDatabase();
+  // We use Provider<Stream<Reading>> only to pass a Stream reference
+  // from main() to DashboardCubit (via listen: false), not for widget
+  // rebuilds. The debug assertion is a false positive here.
+  Provider.debugCheckInvalidValueType = null;
+
+  // Initialize background service (best-effort — failure won't crash app).
+  try {
+    await BackgroundService.initialize();
+  } catch (e, s) {
+    DebugLogger().e('BackgroundService init failed: $e\n$s', tag: 'App');
+  }
+
+  AppDatabase? database;
+  try {
+    database = AppDatabase();
+  } catch (e) {
+    DebugLogger().e('Failed to open database: $e', tag: 'App');
+    rethrow;
+  }
   final repository = SensorRepository(database);
 
   final settings = SettingsService();
@@ -24,18 +56,20 @@ void main() async {
   final notifications = NotificationService();
   await notifications.initialize();
 
-  await BackgroundService.initialize();
-
-  // Real-time push channel: background isolate sends Reading objects;
-  // UI isolate receives them and forwards to a broadcast stream the
-  // DashboardCubit can listen to.
-  final receivePort = ReceivePort();
-  IsolateNameServer.removePortNameMapping(AppConstants.uiIsolatePortName);
-  IsolateNameServer.registerPortWithName(
-    receivePort.sendPort,
-    AppConstants.uiIsolatePortName,
+  final scanService = ScanService(
+    repository: repository,
+    settings: settings,
+    notifications: notifications,
   );
-  final readingStream = receivePort.cast<Reading>().asBroadcastStream();
+
+  // Request BLE permissions before starting the scan loop.
+  // On Android 12+, BLUETOOTH_SCAN permission is required for
+  // flutter_blue_plus.startScan() to work.
+  await PermissionService.requestBlePermissions();
+
+  // Auto-start scanning — tries background service first,
+  // falls back to main-isolate timer if unavailable.
+  scanService.start();
 
   DebugLogger().i('App initialized', tag: 'App');
 
@@ -43,6 +77,7 @@ void main() async {
     repository: repository,
     settings: settings,
     notifications: notifications,
-    readingStream: readingStream,
+    readingStream: scanService.readingStream,
+    scanService: scanService,
   ));
 }

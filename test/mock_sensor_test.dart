@@ -32,9 +32,9 @@ void main() {
       // The random walk step is ±0.3°C/±0.6%; consecutive deltas should
       // never exceed the maximum step magnitude.
       for (var i = 1; i < readings.length; i++) {
-        expect((readings[i].temperature - readings[i - 1].temperature).abs(),
+        expect((readings[i].temperature! - readings[i - 1].temperature!).abs(),
             lessThanOrEqualTo(0.6));
-        expect((readings[i].humidity - readings[i - 1].humidity).abs(),
+        expect((readings[i].humidity! - readings[i - 1].humidity!).abs(),
             lessThanOrEqualTo(1.2));
       }
     });
