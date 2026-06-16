@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:temp_monitor/core/constants.dart';
 import 'package:temp_monitor/infrastructure/debug_logger.dart';
 
@@ -17,6 +18,9 @@ import 'package:temp_monitor/infrastructure/debug_logger.dart';
 /// to the main isolate to confirm the process is alive.
 class BackgroundService {
   static const int _notificationId = 888;
+  static const String _channelId = 'temp_monitor_service';
+  static const String _channelName = '温湿度监控服务';
+  static const String _channelDesc = '后台服务运行中';
   static bool _configured = false;
 
   /// Whether the background service was successfully configured and is
@@ -26,22 +30,47 @@ class BackgroundService {
 
   /// Initialize the background service configuration.
   /// This must be called once during app startup (before [start]).
+  ///
+  /// Pre-creates the notification channel via flutter_local_notifications
+  /// so the background service plugin's Java code can use it immediately
+  /// in onCreate() without needing to auto-create "FOREGROUND_DEFAULT".
+  /// This avoids a race condition where SharedPreferences may not have
+  /// been flushed before the service reads them.
   static Future<void> initialize() async {
     if (_configured) return;
+
+    // Pre-create the notification channel so the plugin's Java
+    // BackgroundService.onCreate() finds it already exists. This is
+    // critical on Android 15+ (API 35) where FOREGROUND_SERVICE_TYPE_MANIFEST
+    // is deprecated: if the plugin's SharedPreferences read returns null
+    // for foreground_service_types (which can happen due to apply()'s
+    // async write), it falls back to the deprecated type and
+    // startForeground() is silently rejected, causing the 5-second
+    // ForegroundServiceDidNotStartInTimeException crash.
+    final androidPlugin = FlutterLocalNotificationsPlugin()
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    if (androidPlugin != null) {
+      const channel = AndroidNotificationChannel(
+        _channelId,
+        _channelName,
+        description: _channelDesc,
+        importance: Importance.low,
+      );
+      await androidPlugin.createNotificationChannel(channel);
+    }
+
     final service = FlutterBackgroundService();
     await service.configure(
       androidConfiguration: AndroidConfiguration(
         onStart: onStart,
         autoStart: false,
         isForegroundMode: true,
-        // NOTE: Intentionally NOT setting notificationChannelId. When the
-        // channel ID is null, flutter_background_service_android's Java
-        // BackgroundService.onCreate() auto-creates "FOREGROUND_DEFAULT"
-        // and its notification channel before calling startForeground().
-        // With a custom ID, it skips channel creation — trusting the app
-        // to have done it — which races against startForeground() and
-        // crashes on Android 12+ with
-        // CannotPostForegroundServiceNotificationException.
+        // Use a pre-created channel so the plugin's Java code skips
+        // auto-creating "FOREGROUND_DEFAULT" in onCreate(). A custom
+        // channel ID forces the plugin to trust the app has created it,
+        // avoiding the race between channel creation and startForeground().
+        notificationChannelId: _channelId,
         initialNotificationTitle: '温湿度监控',
         initialNotificationContent: '正在后台监听设备...',
         foregroundServiceNotificationId: _notificationId,
