@@ -74,12 +74,6 @@ class BackgroundService {
         initialNotificationTitle: '温湿度监控',
         initialNotificationContent: '正在后台监听设备...',
         foregroundServiceNotificationId: _notificationId,
-        // Explicitly declare location foreground service type to match
-        // the manifest declaration. On Android 15 (API 35),
-        // FOREGROUND_SERVICE_TYPE_MANIFEST is deprecated and may cause
-        // startForeground() to fail silently, leading to
-        // ForegroundServiceDidNotStartInTimeException.
-        foregroundServiceTypes: [AndroidForegroundType.dataSync],
       ),
       iosConfiguration: IosConfiguration(
         autoStart: false,
