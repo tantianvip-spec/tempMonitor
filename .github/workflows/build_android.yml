@@ -38,8 +38,12 @@ jobs:
 
       - name: Verify generated files are up-to-date
         run: |
-          echo "Checking that drift generated files are committed and match source..."
-          git diff --exit-code
+          echo "Checking that generated files are committed and match source..."
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Uncommitted or out-of-date generated files detected:"
+            git status --porcelain
+            exit 1
+          fi
 
       - name: Analyze
         # Drift's generated app_database.g.dart emits 2 unavoidable
@@ -119,8 +123,12 @@ jobs:
 
       - name: Verify generated files are up-to-date
         run: |
-          echo "Checking that drift generated files are committed and match source..."
-          git diff --exit-code
+          echo "Checking that generated files are committed and match source..."
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Uncommitted or out-of-date generated files detected:"
+            git status --porcelain
+            exit 1
+          fi
 
       - name: Analyze
         run: flutter analyze --no-fatal-warnings
