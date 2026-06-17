@@ -78,12 +78,13 @@ class BackgroundService {
         // chosen types in SharedPreferences and reuses them on subsequent
         // service starts (including boot and watchdog restarts). If a user
         // previously had an older build that stored "location", the plugin
-        // would request FOREGROUND_SERVICE_TYPE_LOCATION (0x08) while the
-        // manifest only declares dataSync (0x01), causing:
-        //   IllegalArgumentException: foregroundServiceType 0x08 is not a subset of 0x01
-        // Leaving this null makes the plugin use FOREGROUND_SERVICE_TYPE_MANIFEST,
-        // so ServiceCompat reads the type from AndroidManifest.xml where we
-        // declare dataSync. configure() also clears the cached value.
+        // would request FOREGROUND_SERVICE_TYPE_LOCATION (0x08).
+        // We keep the manifest permissive (location|dataSync) during the
+        // transition so those cached starts don't crash, while leaving this
+        // null makes configure() clear the cached value. Subsequent starts
+        // then use FOREGROUND_SERVICE_TYPE_MANIFEST and read dataSync from
+        // AndroidManifest.xml.
+        autoStartOnBoot: false,
       ),
       iosConfiguration: IosConfiguration(
         autoStart: false,
