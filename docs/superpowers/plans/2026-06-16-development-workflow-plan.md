@@ -70,9 +70,9 @@ Expected: 无 diff，命令退出码为 0。
 ```yaml
 on:
   push:
-    branches: [main, master, implement, 'feat/**', 'fix/**', 'hotfix/**']
+    branches: [master, implement, 'feat/**', 'fix/**', 'hotfix/**']
   pull_request:
-    branches: [main, master, implement]
+    branches: [master, implement]
   workflow_dispatch:
 ```
 
@@ -90,8 +90,12 @@ on:
 ```yaml
       - name: Verify generated files are up-to-date
         run: |
-          echo "Checking that drift generated files are committed and match source..."
-          git diff --exit-code
+          echo "Checking that generated files are committed and match source..."
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Uncommitted or out-of-date generated files detected:"
+            git status --porcelain
+            exit 1
+          fi
 ```
 
 - [ ] **Step 3: 在 `release-build` job 中同样增加一致性校验**
@@ -108,8 +112,12 @@ on:
 ```yaml
       - name: Verify generated files are up-to-date
         run: |
-          echo "Checking that drift generated files are committed and match source..."
-          git diff --exit-code
+          echo "Checking that generated files are committed and match source..."
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Uncommitted or out-of-date generated files detected:"
+            git status --porcelain
+            exit 1
+          fi
 ```
 
 - [ ] **Step 4: 提交变更**
@@ -121,7 +129,7 @@ git commit -m "ci: expand trigger branches and verify .g.dart consistency
 
 - Trigger build on feat/*, fix/*, hotfix/* pushes
 - Trigger build on PRs to implement branch
-- Add git diff --exit-code check after build_runner to ensure generated files are committed"
+- Add git status --porcelain check after build_runner to ensure generated files are committed"
 ```
 
 ---
@@ -140,14 +148,12 @@ git commit -m "ci: expand trigger branches and verify .g.dart consistency
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Check PR title format
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          TITLE="${{ github.event.pull_request.title }}"
-          echo "PR title: $TITLE"
-          if echo "$TITLE" | grep -qE '^(feat|fix|refactor|test|docs|ci|chore)(\([^)]+\))?: .+'; then
+          printf 'PR title: %s\n' "$PR_TITLE"
+          if printf '%s\n' "$PR_TITLE" | grep -qE '^(feat|fix|refactor|test|docs|ci|chore|build|perf|style|revert)(\([^)]+\))?!?: .+'; then
             echo "PR title format OK"
           else
             echo "PR title must follow '<type>(<scope>): <subject>'"
@@ -158,7 +164,6 @@ git commit -m "ci: expand trigger branches and verify .g.dart consistency
         if: github.base_ref == 'master'
         run: |
           echo "Target branch is master; ensure pubspec.yaml version is updated if needed."
-          # This is a reminder check; it does not fail the job automatically.
           echo "Manual check required: has pubspec.yaml version been bumped?"
 ```
 
@@ -268,6 +273,10 @@ git commit -m "docs: add pull request template
 **Files:**
 - 仓库设置（GitHub Web UI），无代码文件变更
 
+> **Note:** 本任务仅通过 GitHub Web UI 配置，不修改仓库代码文件。
+
+> **Status check prerequisite:** GitHub only shows status checks in the dropdown after they have run at least once on the target branch. If `build` or `pr-checklist` are not visible when configuring the rule, open a test PR against the target branch first so the checks appear in the UI.
+
 - [ ] **Step 1: 为 `master` 分支启用保护规则**
 
 在 GitHub 仓库页面操作：
@@ -281,6 +290,8 @@ git commit -m "docs: add pull request template
      - 搜索并勾选 `pr-checklist`
    - `Require branches to be up to date before merging`
    - `Restrict pushes that create files larger than 100 MB`
+   - `Block force pushes`
+   - `Do not allow bypassing the above settings`
 4. 保存
 
 - [ ] **Step 2: 为 `implement` 分支启用保护规则**
@@ -292,7 +303,10 @@ git commit -m "docs: add pull request template
    - `Require status checks to pass before merging`
      - 搜索并勾选 `build`
    - `Require branches to be up to date before merging`
+   - `Restrict pushes that create files larger than 100 MB`
 4. 保存
+
+> **Note on `pr-checklist`:** The `pr-checklist` job enforces the conventional commit style in the PR title. The version-bump step for `master`-bound PRs is a non-blocking reminder; it logs a message and does not fail the job.
 
 - [ ] **Step 3: 记录分支保护配置**
 

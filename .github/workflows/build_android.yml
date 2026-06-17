@@ -2,9 +2,9 @@ name: Build Android APK
 
 on:
   push:
-    branches: [main, master, implement]
+    branches: [master, implement, 'feat/**', 'fix/**', 'hotfix/**']
   pull_request:
-    branches: [main, master]
+    branches: [master, implement]
   workflow_dispatch:
 
 jobs:
@@ -35,6 +35,15 @@ jobs:
 
       - name: Run code generation (drift)
         run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Verify generated files are up-to-date
+        run: |
+          echo "Checking that generated files are committed and match source..."
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Uncommitted or out-of-date generated files detected:"
+            git status --porcelain
+            exit 1
+          fi
 
       - name: Analyze
         # Drift's generated app_database.g.dart emits 2 unavoidable
@@ -75,6 +84,28 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  pr-checklist:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Check PR title format
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf 'PR title: %s\n' "$PR_TITLE"
+          if printf '%s\n' "$PR_TITLE" | grep -qE '^(feat|fix|refactor|test|docs|ci|chore|build|perf|style|revert)(\([^)]+\))?!?: .+'; then
+            echo "PR title format OK"
+          else
+            echo "PR title must follow '<type>(<scope>): <subject>'"
+            exit 1
+          fi
+
+      - name: Check version bump for master-bound PRs
+        if: github.base_ref == 'master'
+        run: |
+          echo "Target branch is master; ensure pubspec.yaml version is updated if needed."
+          echo "Manual check required: has pubspec.yaml version been bumped?"
+
   release-build:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master'
@@ -112,11 +143,30 @@ jobs:
       - name: Run code generation (drift)
         run: dart run build_runner build --delete-conflicting-outputs
 
+      - name: Verify generated files are up-to-date
+        run: |
+          echo "Checking that generated files are committed and match source..."
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Uncommitted or out-of-date generated files detected:"
+            git status --porcelain
+            exit 1
+          fi
+
       - name: Analyze
         run: flutter analyze --no-fatal-warnings
 
       - name: Run unit tests
         run: flutter test --dart-define=APP_VERSION=${{ steps.version.outputs.version }}
+
+      - name: Integration test placeholder
+        # Integration tests require BLE, notifications, background service, and a
+        # real Android/iOS device or emulator, so they cannot run in the headless
+        # CI runner used for this workflow.
+        run: |
+          echo "::warning::Integration tests are not executed in CI."
+          echo "::warning::Run locally on a device or emulator before release:"
+          echo "::warning::  flutter test integration_test"
+        continue-on-error: true
 
       - name: Decode keystore
         run: printf '%s' "${{ secrets.UPLOAD_KEYSTORE_B64 }}" | base64 -d > android/app/upload-keystore.jks
