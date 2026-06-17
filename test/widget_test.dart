@@ -10,6 +10,7 @@ import 'package:temp_monitor/app.dart';
 import 'package:temp_monitor/data/app_database.dart';
 import 'package:temp_monitor/infrastructure/notification_service.dart';
 import 'package:temp_monitor/repositories/sensor_repository.dart';
+import 'package:temp_monitor/presentation/settings/settings_page.dart';
 import 'package:temp_monitor/services/scan_service.dart';
 import 'package:temp_monitor/services/settings_service.dart';
 
@@ -24,7 +25,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('App boots with main navigation', (tester) async {
+  testWidgets('App boots with 3-tab navigation and debug entry in settings', (tester) async {
     final db = AppDatabase.forTesting(NativeDatabase.memory());
     final repo = SensorRepository(db);
     final settings = SettingsService();
@@ -47,16 +48,38 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('仪表盘'), findsOneWidget);
-    expect(find.text('设备'), findsOneWidget);
-    expect(find.text('设置'), findsOneWidget);
-    // 调试不再作为底部 tab
+    expect(
+      find.descendant(of: find.byType(NavigationBar), matching: find.text('仪表盘')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: find.byType(NavigationBar), matching: find.text('设备')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: find.byType(NavigationBar), matching: find.text('设置')),
+      findsOneWidget,
+    );
     expect(
       find.descendant(of: find.byType(NavigationBar), matching: find.text('调试')),
       findsNothing,
     );
-    // 调试入口在设置页里
-    expect(find.text('调试日志'), findsOneWidget);
+
+    // Navigate to settings and scroll to the debug entry.
+    await tester.tap(find.descendant(
+      of: find.byType(NavigationBar),
+      matching: find.text('设置'),
+    ));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('调试日志'),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(
+      find.descendant(of: find.byType(SettingsPage), matching: find.text('调试日志')),
+      findsOneWidget,
+    );
 
     await db.close();
     scanService.dispose();
