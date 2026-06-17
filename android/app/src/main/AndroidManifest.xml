@@ -41,7 +41,7 @@
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="dataSync"
             android:exported="false"
-            tools:replace="android:exported,android:foregroundServiceType" />
+            tools:replace="android:exported" />
 
         <receiver
             android:name="id.flutter.flutter_background_service.BootReceiver"
