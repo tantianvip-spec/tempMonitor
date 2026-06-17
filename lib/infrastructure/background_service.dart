@@ -74,12 +74,16 @@ class BackgroundService {
         initialNotificationTitle: '温湿度监控',
         initialNotificationContent: '正在后台监听设备...',
         foregroundServiceNotificationId: _notificationId,
-        // Explicitly declare dataSync so the plugin's Java code passes
-        // FOREGROUND_SERVICE_TYPE_DATA_SYNC (0x08) to ServiceCompat.startForeground()
-        // instead of FOREGROUND_SERVICE_TYPE_MANIFEST (0x01). On Android 16, passing
-        // 0x01 when the manifest declares dataSync (0x08) causes:
-        //   IllegalArgumentException: foregroundServiceType 0x01 is not a subset of 0x08
-        foregroundServiceTypes: [AndroidForegroundType.dataSync],
+        // Do NOT pass foregroundServiceTypes here. The plugin persists the
+        // chosen types in SharedPreferences and reuses them on subsequent
+        // service starts (including boot and watchdog restarts). If a user
+        // previously had an older build that stored "location", the plugin
+        // would request FOREGROUND_SERVICE_TYPE_LOCATION (0x08) while the
+        // manifest only declares dataSync (0x01), causing:
+        //   IllegalArgumentException: foregroundServiceType 0x08 is not a subset of 0x01
+        // Leaving this null makes the plugin use FOREGROUND_SERVICE_TYPE_MANIFEST,
+        // so ServiceCompat reads the type from AndroidManifest.xml where we
+        // declare dataSync. configure() also clears the cached value.
       ),
       iosConfiguration: IosConfiguration(
         autoStart: false,
