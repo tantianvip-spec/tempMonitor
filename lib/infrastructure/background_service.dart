@@ -78,12 +78,19 @@ class BackgroundService {
         // chosen types in SharedPreferences and reuses them on subsequent
         // service starts (including boot and watchdog restarts). If a user
         // previously had an older build that stored "location", the plugin
-        // would request FOREGROUND_SERVICE_TYPE_LOCATION (0x08).
+        // would request FOREGROUND_SERVICE_TYPE_LOCATION (0x01).
         // We keep the manifest permissive (location|dataSync) during the
         // transition so those cached starts don't crash, while leaving this
         // null makes configure() clear the cached value. Subsequent starts
-        // then use FOREGROUND_SERVICE_TYPE_MANIFEST and read dataSync from
-        // AndroidManifest.xml.
+        // then use FOREGROUND_SERVICE_TYPE_MANIFEST and read the combined
+        // type from AndroidManifest.xml.
+        //
+        // IMPORTANT: the manifest must declare both
+        // FOREGROUND_SERVICE_LOCATION and FOREGROUND_SERVICE_DATA_SYNC
+        // permissions; missing either causes startForeground() to throw a
+        // SecurityException that the plugin catches and logs, leaving the
+        // service without a foreground notification and triggering the
+        // 5-second ForegroundServiceDidNotStartInTimeException crash.
         autoStartOnBoot: false,
       ),
       iosConfiguration: IosConfiguration(
