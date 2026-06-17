@@ -6,8 +6,6 @@ import 'package:temp_monitor/domain/models/reading.dart';
 import 'package:temp_monitor/infrastructure/notification_service.dart';
 import 'package:temp_monitor/presentation/dashboard/dashboard_cubit.dart';
 import 'package:temp_monitor/presentation/dashboard/dashboard_page.dart';
-import 'package:temp_monitor/presentation/debug/debug_log_cubit.dart';
-import 'package:temp_monitor/presentation/debug/debug_log_page.dart';
 import 'package:temp_monitor/presentation/devices/devices_page.dart';
 import 'package:temp_monitor/presentation/settings/settings_cubit.dart';
 import 'package:temp_monitor/presentation/settings/settings_page.dart';
@@ -90,10 +88,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
       const DevicesPage(),
       const SettingsPage(),
-      BlocProvider(
-        create: (_) => DebugLogCubit(),
-        child: const DebugLogPage(),
-      ),
     ];
 
     return Scaffold(
@@ -106,7 +100,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           NavigationDestination(icon: Icon(Icons.dashboard), label: '仪表盘'),
           NavigationDestination(icon: Icon(Icons.devices), label: '设备'),
           NavigationDestination(icon: Icon(Icons.settings), label: '设置'),
-          NavigationDestination(icon: Icon(Icons.bug_report), label: '调试'),
         ],
       ),
     );

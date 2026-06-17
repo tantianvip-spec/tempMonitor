@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:temp_monitor/core/constants.dart';
 import 'package:temp_monitor/core/theme.dart';
+import 'package:temp_monitor/presentation/debug/debug_log_cubit.dart';
+import 'package:temp_monitor/presentation/debug/debug_log_page.dart';
 import 'package:temp_monitor/presentation/settings/settings_cubit.dart';
 import 'package:temp_monitor/widgets/threshold_editor.dart';
 
@@ -138,6 +140,23 @@ class SettingsPage extends StatelessWidget {
                 activeColor: AppTheme.accentSuccess,
                 onChanged: (value) =>
                     context.read<SettingsCubit>().setMockDeviceEnabled(value),
+              ),
+              const Divider(indent: 16, endIndent: 16),
+              const _SectionHeader(title: '调试'),
+              ListTile(
+                leading: const Icon(Icons.bug_report_outlined),
+                title: const Text('调试日志'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => BlocProvider(
+                        create: (_) => DebugLogCubit(),
+                        child: const DebugLogPage(),
+                      ),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 8),
               // App version footer
