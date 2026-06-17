@@ -2,6 +2,7 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:drift/native.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/open.dart';
@@ -46,9 +47,16 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
+    expect(find.text('仪表盘'), findsOneWidget);
     expect(find.text('设备'), findsOneWidget);
     expect(find.text('设置'), findsOneWidget);
-    expect(find.text('调试'), findsOneWidget);
+    // 调试不再作为底部 tab
+    expect(
+      find.descendant(of: find.byType(NavigationBar), matching: find.text('调试')),
+      findsNothing,
+    );
+    // 调试入口在设置页里
+    expect(find.text('调试日志'), findsOneWidget);
 
     await db.close();
     scanService.dispose();
