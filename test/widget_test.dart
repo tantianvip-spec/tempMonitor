@@ -36,52 +36,60 @@ void main() {
       settings: settings,
       notifications: notifications,
     );
+    addTearDown(scanService.dispose);
     // Skip notifications.initialize() — flutter_local_notifications needs
     // platform binding for plugin registration. The widget tree doesn't
     // depend on the plugin being initialized for the boot smoke test.
 
-    await tester.pumpWidget(TempMonitorApp(
-      repository: repo,
-      settings: settings,
-      notifications: notifications,
-      scanService: scanService,
-    ));
-    await tester.pumpAndSettle();
+    try {
+      await tester.pumpWidget(TempMonitorApp(
+        repository: repo,
+        settings: settings,
+        notifications: notifications,
+        scanService: scanService,
+      ));
+      await tester.pumpAndSettle();
 
-    expect(
-      find.descendant(of: find.byType(NavigationBar), matching: find.text('仪表盘')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: find.byType(NavigationBar), matching: find.text('设备')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: find.byType(NavigationBar), matching: find.text('设置')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: find.byType(NavigationBar), matching: find.text('调试')),
-      findsNothing,
-    );
+      expect(
+        find.descendant(of: find.byType(NavigationBar), matching: find.text('仪表盘')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: find.byType(NavigationBar), matching: find.text('设备')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: find.byType(NavigationBar), matching: find.text('设置')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: find.byType(NavigationBar), matching: find.text('调试')),
+        findsNothing,
+      );
 
-    // Navigate to settings and scroll to the debug entry.
-    await tester.tap(find.descendant(
-      of: find.byType(NavigationBar),
-      matching: find.text('设置'),
-    ));
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('调试日志'),
-      200,
-      scrollable: find.byType(Scrollable).last,
-    );
-    expect(
-      find.descendant(of: find.byType(SettingsPage), matching: find.text('调试日志')),
-      findsOneWidget,
-    );
-
-    await db.close();
-    scanService.dispose();
+      // Navigate to settings and scroll to the debug entry.
+      await tester.tap(find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('设置'),
+      ));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('调试日志'),
+        200,
+        scrollable: find.descendant(
+          of: find.byType(SettingsPage),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(
+        find.descendant(of: find.byType(SettingsPage), matching: find.text('调试日志')),
+        findsOneWidget,
+      );
+    } finally {
+      // Closing the database inside the test body (rather than addTearDown)
+      // avoids a drift pending-timer race when the framework later disposes
+      // the widget tree and closes DashboardCubit streams.
+      await db.close();
+    }
   });
 }
